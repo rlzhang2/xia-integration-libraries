@@ -27,7 +27,7 @@ extern "C" {
 // The protobuf defs to configure forwarding table on router
 #include "configrequest.pb.h"
 
-#define CONFFILE "local.conf"
+#define CONFFILE "../conf/local.conf"
 
 // Let's hard code the router's address for now
 #define OUR_ADDR "OUR_ADDR"
@@ -769,8 +769,11 @@ int picoquic_xia_router_addr(struct sockaddr_in* router_addr)
         std::cout << "Error converting router addr" << std::endl;
         return -1;
     }
-    //printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
-            //ntohs(router_addr->sin_port));
+
+    //check convert host addr to internet dot notation
+    std::cout<<"CHECK ROUTER_ADDR: "<<raddr.c_str() <<" port "<<rport<<std::endl;
+    printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
+            ntohs(router_addr->sin_port));
     return 0;
 }
 
@@ -791,8 +794,9 @@ int picoquic_xia_router_addr(struct sockaddr_in* router_addr, LocalConfig &conf)
         std::cout << "Error converting router addr" << std::endl;
         return -1;
     }
-    //printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
-            //ntohs(router_addr->sin_port));
+     std::cout<<"CHECK ROUTER_ADDR from confile file "<<raddr.c_str() <<" port "<<rport<<std::endl;
+    printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
+            ntohs(router_addr->sin_port));
     return 0;
 }
 

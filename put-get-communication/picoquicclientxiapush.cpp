@@ -1,12 +1,12 @@
  #include "localconfig.hpp"
 // XIA support
 #include <openssl/pem.h>
-#include "xiaapi.hpp"
+#include "../xia-api-lib/xiaapi.hpp"
 #include "dagaddr.hpp"
 #include "headers/ncid_header.h"
-#include "chunkapi.h"               //chunk content
-#include "chunkhash.h"
-#include "get_putChunkapi.h"
+#include "../contentchunk-lib/chunkapi.h"               //chunk content
+#include "../contentchunk-lib/chunkhash.h"
+#include "../contentchunk-lib/get_putChunkapi.h"
 
 // C++ includes
 #include <iostream>
@@ -24,40 +24,45 @@ extern "C" {
 #include "util.h"
 };
 
-#define CONFFILE "../../conf/local.conf"
+#define CONFFILE "./conf/local.conf"
+#define THEIR_ADDR "THEIR_ADDR" // The THEIR_ADDR entry in config file
+#define CLIENT_AID "CLIENT_AID" // The CLIENT_AID entry in config file
+#define CONTENT_STORE "CONTENT_STORE"
+#define WORKDIR "WORKDIR"
+#define IFNAME "IFNAME"
 #define CONTROL_PORT "8295"
 #define CONTROL_IP "172.64.0.31"
-#define CONTENT_STORE "CONTENT_STORE"
 
 int cnx_handler (struct addr_info_t &test_from_addr, 
 		 struct addr_info_t &test_to_addr, LocalConfig &conf) {
-	std::cout<<"---------STEP0: "<< __FUNCTION__ <<"________"<<std::endl;
+
         int retval = -1;
 	int state = 0;
 
-	//chunking content variables
-	vector <string> xid_lst;
-	std::string homepath = getenv("HOME");
-	auto confile = LocalConfig(CONFFILE);
-	std::string tmpContent_f = homepath + confile.get(CONTENT_STORE);
-
-	//quic client variables
-        uint64_t current_time;
+	uint64_t current_time;
 	struct callback_context_t callback_context;
-        std::string proc_type = "GET";
-        FILE* logfile = NULL;
+	std::string proc_type ="PUT";
+	FILE* logfile = NULL;
+	
+	//get chunking xids
+	auto confile = LocalConfig(CONFFILE);
+	std::string homepath = getenv("HOME");
+        std::string tmpContent_f = confile.get(WORKDIR)  + confile.get(CONTENT_STORE);
+	vector <string> xid_lst;
+        xid_lst = contentChunkIDs(tmpContent_f);
 
-        picoquic_quic_t *quic_client;
+	picoquic_quic_t *quic_client;
 
         memset(&callback_context, 0, sizeof(struct callback_context_t));
 
         state = 1; // socket created
-	//step1. Create QUIC context for client
+	printf("Client socket fd: %d\n", test_from_addr.sockfd);
+        //step1. Create QUIC context for client
         current_time = picoquic_current_time();
         callback_context.last_interaction_time = current_time;
 
         quic_client = picoquic_create(
-                        8,             // number of connections
+                        2,             // number of connections
                         NULL,          // cert_file_name
                         NULL,          // key_file_name
                         NULL,          // cert_root_file_name
@@ -80,7 +85,7 @@ int cnx_handler (struct addr_info_t &test_from_addr,
         printf("Created QUIC context\n");
         state = 2; // picoquic context created for client
 
-        //step2. create a log file for writing
+	//step2. create a log file for writing
         logfile = fopen("client.log", "w");
         if(logfile == NULL) {
                 printf("ERROR opening log file\n");
@@ -89,21 +94,19 @@ int cnx_handler (struct addr_info_t &test_from_addr,
         PICOQUIC_SET_LOG(quic_client, logfile);
         state = 3; // logfile needs to be closed
 
-	//step3. put requested xids to quic cnx
-	xid_lst = contentChunkIDs(tmpContent_f);
-        //cout<<"Count the size: " <<xid_lst.size()<<endl;
 	get_chunk_data (test_from_addr, test_to_addr, xid_lst, quic_client, callback_context,
                                        state, current_time, proc_type, conf);
 
-	client_done:
-	         switch(state) {
-	            case 3:
-			fclose(logfile);
-	            case 2:
-			picoquic_free(quic_client);
-	            case 1:
-			close(test_from_addr.sockfd);
+        client_done:
+                 switch(state) {
+                    case 3:
+                        fclose(logfile);
+                    case 2:
+                        picoquic_free(quic_client);
+                    case 1:
+                        close(test_from_addr.sockfd);
          };
+
 
         retval=0;
         return retval;
@@ -111,7 +114,7 @@ int cnx_handler (struct addr_info_t &test_from_addr,
 
 int main()
 {
-	int retval = -1;	
+	 int retval = -1;	
 	// read local config
 	LocalConfig conf;
         conf.control_addr = CONTROL_IP;
@@ -120,8 +123,7 @@ int main()
         addr_info_t myaddr;
         addr_info_t serveraddr;
 
-
-	 if(conf.configure(CONTROL_PORT, CONTROL_IP, myaddr, serveraddr) < 0)
+	if(conf.configure(CONTROL_PORT, CONTROL_IP, myaddr, serveraddr) < 0)
         {
 		std::cout<<"Error configuration" <<endl;
                 return retval;

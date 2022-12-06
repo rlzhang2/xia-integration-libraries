@@ -1,4 +1,4 @@
-#include "xiaapi.hpp"
+#include "../xia-api-lib/xiaapi.hpp"
 
 #include <stdio.h>
 #include <assert.h>
@@ -20,6 +20,7 @@
 #include <stdlib.h>
 
 #include "headers/ncid_header.h"
+#define WORKDIR "/home/testpath"
 #define CHUNKS_RECV_DIR "/picoquic/tmpChunks_recv/"
 
 using namespace std;
@@ -55,7 +56,7 @@ void put_chunk(picoquic_cnx_t* connection,
 		char data[cid_data.length()];
                 strcpy(data, cid_data.c_str());
 
-        	printf("Sending CIDData length: %ld Data length: %ld CID string %s \n", cid_data.length(), sizeof(data), data);
+        	//printf("Sending CIDData length: %ld Data length: %ld CID string %s \n", cid_data.length(), sizeof(data), data);
 		if(picoquic_add_to_stream(connection,
                                 stream_id, // Any arbitrary stream ID client picks
                                 (uint8_t*)data, sizeof(data), // data to be sent
@@ -84,14 +85,6 @@ void put_chunk(picoquic_cnx_t* connection,
                 //Prefix CID data to the chunk content data, so tmpChunkData is completed cid putData
                 tmpChunkData.insert(tmpChunkData.begin(), tmpdata, tmpdata+sizeof(tmpdata));
 		
-                /*Debug check to put the correct CID+data -- PASS
-                std::vector<uint8_t>::iterator it;
-                std::cout << "Check PUT contains:"<<endl;
-                for (it=putChunkData.begin(); it<putChunkData.end(); it++)
-                         std::cout << *it;
-                std::cout << '\n';
-		}*/
-
 		if(picoquic_add_to_stream(connection,
                                 stream_id, // Any arbitrary stream ID client picks
 				tmpChunkData.data() , tmpChunkData.size(), // data to be sent
@@ -116,6 +109,10 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
 	std::cout<<"--------: "<<__FUNCTION__<<"------"<<endl;
                 std::string path;
 		std::string homepath = getenv("HOME");
+		#ifdef WORKDIR
+			printf("workpath is defined");
+			homepath.assign(WORKDIR);
+		#endif
 		std::string tmp_fs = homepath + CHUNKS_RECV_DIR;
 		size_t found;
 		std::vector<uint8_t> datapart_tmp;

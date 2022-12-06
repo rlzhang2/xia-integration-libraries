@@ -1,0 +1,19 @@
+!!!picoquic!
+
+Minimalist implementation of the QUIC protocol, as defined by the IETF.
+The IETF spec started with the version of QUIC defined by Google and
+implemented in Chrome, but the IETF spec is independent of Chrome, and
+does not attempt to be backward compatible. The main developer is
+Christian Huitema.
+
+The first goal of this project is to provide feedback on the development
+of a QUIC standard in the IETF QUIC WG. Information on the WG is available at
+https://datatracker.ietf.org/wg/quic/charter/. The in-progress version of
+the spec is available on GitHub at https://github.com/quicwg.
+
+The second goal is to experiment with API for non-HTTP development, such as
+DNS over QUIC. Then there are plenty of other features we may dream off,
+such as support for multipath, or support for peer-to-peer applications.
+That's on the horizon, but not there now.
+
+#############THIS IS THE END OF TEST CONTENT

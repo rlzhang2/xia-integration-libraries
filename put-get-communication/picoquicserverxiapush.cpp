@@ -4,30 +4,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <iostream>
-
+#include <fstream>
 extern "C" {
 #include "picoquic.h"
 #include "picosocks.h"
 #include "util.h"
 };
-#include "xiaapi.hpp"
+#include "../contentchunk-lib/chunkapi.h"
+#include "../xia-api-lib/xiaapi.hpp"
 #include "dagaddr.hpp"
+#include "../contentchunk-lib/get_putChunkapi.h"
 
 #define SERVER_CERT_FILE "certs/cert.pem"
 #define SERVER_KEY_FILE "certs/key.pem"
 
-#define CONFFILE "../../conf/local.conf"
+#define CONFFILE "./conf/local.conf"
 #define SERVER_AID "SERVER_AID"
 #define IFNAME "IFNAME"
 #define CONTROL_PORT "8295"
-#define CONTROL_IP "10.0.1.133"
-
-// typedef struct addr_info_t {
-// 	int sockfd;
-// 	GraphPtr dag;
-// 	sockaddr_x addr;
-// 	int addrlen;
-// };
+#define CONTROL_IP "172.64.0.21"
 
 void print_address(struct sockaddr* address, char* label)
 {
@@ -43,10 +38,32 @@ void print_address(struct sockaddr* address, char* label)
 	return;
 }
 
-typedef struct {
-	int stream_open;     // Assuming just one stream for now
-	int received_so_far; // Number of bytes received in that one stream
-} callback_context_t;
+//Check to assign requested xid from PUSH to context for validation
+int setContextXID(picoquic_cnx_t* connection, callback_context_t* context, uint8_t* bytes, size_t length, string proc_type)
+{
+	int ret = -1;
+
+	//check streaming putdata from Client
+	char temp_data[length];
+        memcpy(temp_data, bytes, length);
+        //temp_data[length] = 0;
+	//printf("ServerCallback: Client sent putData: \n %s\n\n", temp_data);
+
+        //separate prefix XID type from content chunkdata; context->xid capture all xids
+        string sXidData(temp_data);
+        string sXid=sXidData.substr(0,44);
+        context->xid.push_back(sXid);
+	//std::cout<<"Context xid size: "<< context->xid.size()<<endl;
+
+	//release mem
+	memset(temp_data, 0, sizeof(temp_data));
+
+        if (store_chunk(connection, context,bytes, length, sXid, proc_type) ==0){
+                 printf("PUT data stored!!!\n");
+		 ret =0;
+        }
+	return ret;
+}
 
 static int server_callback(picoquic_cnx_t* connection,
 		uint64_t stream_id, uint8_t* bytes, size_t length,
@@ -55,6 +72,7 @@ static int server_callback(picoquic_cnx_t* connection,
 	printf("ServerCallback: stream: %lu, len: %zu, event: %d\n",
 			stream_id, length, event);
 	callback_context_t* context = (callback_context_t*)ctx;
+	std::string proc_type ="PUT";
 
 	switch(event) {
 		case picoquic_callback_ready:
@@ -99,6 +117,10 @@ static int server_callback(picoquic_cnx_t* connection,
 			return 0;
 		case picoquic_callback_stream_data:
 			printf("ServerCallback: StreamData\n");
+			 if(context && (length > 0)) {
+				context->received_so_far += length;
+				setContextXID(connection,context, bytes, length, proc_type);
+			 }
 		case picoquic_callback_stream_fin:
 			printf("ServerCallback: StreamFin\n");
 			if(event == picoquic_callback_stream_fin && length == 0) {
@@ -107,7 +129,7 @@ static int server_callback(picoquic_cnx_t* connection,
 						PICOQUIC_TRANSPORT_STREAM_STATE_ERROR);
 				return 0;
 			}
-			// If there's to context, create one
+			// If there's no context, create one
 			if(!context) {
 				printf("ServerCallback: creating a new context for stream\n");
 				callback_context_t *new_context = (callback_context_t*)malloc(
@@ -124,18 +146,20 @@ static int server_callback(picoquic_cnx_t* connection,
 						new_context);
 				context = new_context;
 				if(length > 0) {
-					char data[length+1];
-					memcpy(data, bytes, length);
-					data[length] = 0;
-					printf("ServerCallback: Client sent: %s\n", data);
 					context->received_so_far += length;
-					// Send it back to client and FIN the stream
-					(void)picoquic_add_to_stream(connection, stream_id,
-							(uint8_t*)data, length, 1);
+                                	setContextXID(connection,context, bytes, length, proc_type);
 				}
 			}
 			if(event != picoquic_callback_stream_data) {
-				printf("ServerCallback: StreamFin\n");
+				
+				if (context) {	
+			       //pull Client ack response after processing stream data from Client
+				char rdata[length+1];
+                        	memcpy(rdata, bytes, length);
+                        	rdata[length] = 0;
+                        	std::string ClientAck(rdata);
+                        	cout<<"ServerCallback: Client ACK after completed stream: "<< ClientAck.c_str()<<endl;
+				}
 				printf("ServerCallback: Client sent %d bytes before ending\n",
 						context->received_so_far);
 			}
@@ -159,28 +183,10 @@ int main()
 	int bytes_recv;                    // size of packet received
 	picoquic_cnx_t* connections = NULL;
 	picoquic_cnx_t* next_connection = NULL;
-	uint8_t send_buffer[1536];
+	uint8_t send_buffer[2000];
 	size_t send_length = 0;
 	unsigned char received_ecn;
-	//int sockfd = -1;
 
-	// auto conf = LocalConfig::get_instance(CONFFILE);
-	// auto server_aid = conf.get(SERVER_AID);
-	// std::string server_ifname = conf.get(IFNAME);
-	
-	// // We give a fictitious AID for now, and get a dag in my_addr
-	// std::cout<<"Xia open server"<<std::endl;
-	//  = picoquic_xia_open_server_socket(server_aid.c_str(), my_addr, server_ifname);
-	// if(sockfd == -1) {
-	// 	printf("ERROR creating xia server socket\n");
-	// 	return -1;
-	// } else {
-	// 	printf("SUCCESS creating xia server socket\n");
-	// }
-	// LocalConfig conf;
-	// GraphPtr mydag;
-	// int my_addrlen;
-	// sockaddr_x my_addr;
 	addr_info_t myaddr;
 	LocalConfig conf;
 	conf.control_addr = CONTROL_IP;
@@ -191,6 +197,7 @@ int main()
 		goto server_done;
 	}	
 	state = 1; // server socket now exists
+	printf("Check server socket fd: %d\n", myaddr.sockfd);
 
 	// Get the server certificate
 	char server_cert_file[512];
@@ -247,7 +254,6 @@ int main()
 				delay_max);
 
 		printf("Going into select\n");
-
 		bytes_recv = picoquic_xia_select(myaddr.sockfd, &addr_from,
 				&addr_local, buffer, sizeof(buffer),
 				delta_t,
@@ -261,17 +267,18 @@ int main()
 		if(bytes_recv > 0) {
 			// Process the incoming packet via QUIC server
 			printf("Server: got %d bytes from client\n", bytes_recv);
-			//char label[] = "Server: client addr:";
-			//print_address((struct sockaddr*)&addr_from, label);
 			(void)picoquic_incoming_packet(server, buffer,
 					(size_t)bytes_recv, (struct sockaddr*)&addr_from,
 					(struct sockaddr*)&addr_local, to_interface,
 					received_ecn,
 					current_time);
-			//printf("Server: processed incoming packet through QUIC\n");
-			//print_address((struct sockaddr*)&addr_from, label);
-			//char label2[] = "Server: server addr:";
-			//print_address((struct sockaddr*)&addr_local, label2);
+			
+			printf("Server: processed incoming packet through QUIC\n");
+			char label[] = "Server: client addr:";
+			print_address((struct sockaddr*)&addr_from, label);
+			char label2[] = "Server: server addr:";
+			print_address((struct sockaddr*)&addr_local, label2);
+
 			// If we don't have a list of server connections, get it
 			if(connections==NULL
 					|| connections!=picoquic_get_first_cnx(server)) {
@@ -281,9 +288,9 @@ int main()
 					printf("ERROR: No connection found!\n");
 					goto server_done;
 				}
-				printf("Server: Connection established\n");
-				printf("Server: Connection state = %d\n",
+				printf("Server: Connection established. Connection state = %d\n",
 						picoquic_get_cnx_state(connections));
+                printf("\n%" PRIx64 ": ", picoquic_val64_connection_id(picoquic_get_initial_cnxid(connections)));
 
 			}
 		}
@@ -311,11 +318,13 @@ int main()
 			sockaddr_x local_addr;
 			int peer_addr_len = sizeof(sockaddr_x);
 			int local_addr_len = sizeof(sockaddr_x);
+
 			// Ask QUIC to prepare a packet to send out on this connection
 			//
 			// TODO: HACK!!! peer and local addr pointers sent as
 			// sockaddr_storage so underlying code won't complain.
 			// Fix would require changes to picoquic which we want to avoid
+
 			int rc = picoquic_prepare_packet(next_connection, current_time,
 					send_buffer, sizeof(send_buffer), &send_length,
 					(struct sockaddr_storage*) &peer_addr, &peer_addr_len,

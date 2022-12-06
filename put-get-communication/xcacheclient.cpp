@@ -1,7 +1,7 @@
 #include "localconfig.hpp"
 
 // XIA support
-#include "xiaapi.hpp"
+#include "../xia-api-lib/xiaapi.hpp"
 #include "dagaddr.hpp"
 #include "cid_header.h"
 

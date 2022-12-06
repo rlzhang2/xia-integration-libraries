@@ -18,6 +18,7 @@
 #include <utility>
 #include <tuple>
 
+#define WORKDIR "/home/testpath"
 #define CHUNKS_DIR "/picoquic/tmpChunks/"
 #define SIGNATURE_BIN "/picoquic/tmpSignatureBin/"
 const uint32_t default_chunk_size = 1024 * 1024;
@@ -65,6 +66,10 @@ std::pair<string, uint8_t*> get_chunkhash(std::string cid, std::vector<uint8_t>&
 {
         struct stat info;
 	std::string homepath = getenv("HOME");
+	#ifdef WORKDIR
+		homepath.assign(WORKDIR);
+        #endif
+
         std::string content_dir = homepath + CHUNKS_DIR;
         std::string path = content_dir + cid;
 	unsigned char chunk_hash[SHA_DIGEST_LENGTH];
@@ -100,6 +105,9 @@ std::vector<uint8_t> get_chunkdata(std::string cid, size_t cSize)
 
     //Check to see if CID content is available on xcache local:
      std::string homepath = getenv("HOME");
+     #ifdef WORKDIR
+	homepath.assign(WORKDIR);
+     #endif
      std::string CID_path = homepath + CHUNKS_DIR + cid;
 
      std::ifstream tmp_fin(CID_path.c_str(), std::ios::in | std::ios::binary);
@@ -136,6 +144,9 @@ std::tuple<string, std::vector<uint8_t>, size_t> load_chunk(std::string cid, std
 	struct stat info;
 	int rc;
 	std::string homepath = getenv("HOME");
+	#ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+     	#endif
 	std::string content_dir = homepath + CHUNKS_DIR;
 	std::string path = content_dir + cid;
 
@@ -183,6 +194,9 @@ bool valid_chunk_signature (std::string ncid_sign, std::string publisherName, st
 	//valid the NCID header
 	struct stat info;
 	std::string homepath = getenv("HOME");
+	#ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+     	#endif
         std::string content_dir = homepath + CHUNKS_DIR;
         std::string path = content_dir + ncid_sign;
 	size_t pos_ncid = ncid_sign.find("NCID:");
@@ -272,6 +286,9 @@ bool valid_chunk_data (std::string sCid, std::vector<uint8_t>& chunk_data) {
 	int rc;
 	std::string datahex_located;
 	std::string homepath = getenv("HOME");
+	#ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+     	#endif
         std::string content_dir = homepath + CHUNKS_DIR;
 	std::string cType = "CID";
         cType += ":";
@@ -344,6 +361,9 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count)
 	unsigned char digest[SHA_DIGEST_LENGTH];
 	char digest_string[SHA_DIGEST_LENGTH*2+1];
 	std::string homepath = getenv("HOME");
+     	#ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+     	#endif
 	std::string content_dir = homepath + CHUNKS_DIR;
 	std::string xid_type = XID_TYPE;
 	//generate a digesting with the buffer containing a SHA1 hash
@@ -383,6 +403,9 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count)
 int write_signature(std::string sign, std::string sign_buf)
 {
 	std::string homepath = getenv("HOME");
+     	#ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+     	#endif
 	std::string sign_dir = homepath + SIGNATURE_BIN;
 	std::string sign_name = sign_dir + sign;
 
@@ -426,6 +449,9 @@ int write_signature(std::string sign, std::string sign_buf)
 std::string write_chunk(const unsigned char *buf, uint32_t byte_count, std::string publisher_name, std::string content_name) 
 {
 	std::string homepath = getenv("HOME");
+     	#ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+     	#endif
 	std::string content_dir = homepath + CHUNKS_DIR;
 
 	//create a hash of pubkey+contentName
@@ -634,6 +660,9 @@ chunkhash_table* initHashtable (const vector<string>& cid_list_t){
 		
 		std::string tmpName = cid_list_t[i];
 		std::string homepath = getenv("HOME");
+     		#ifdef WORKDIR
+        		homepath.assign(WORKDIR);
+     		#endif
 		std::string tmpPath = homepath + CHUNKS_DIR + tmpName;
 
  		char a1[(cid_list_t[i]).size() + 1];
@@ -682,6 +711,9 @@ std::map <std::string, chunkMeta> get_mapOfchunks (std::string path )
   map<std::string, chunkMeta> tmpMap;
   struct stat st;
   std::string homepath = getenv("HOME");
+  #ifdef WORKDIR
+        homepath.assign(WORKDIR);
+  #endif
   std::string content_dir = homepath + CHUNKS_DIR;
   struct dirent* de;
   DIR* dp= opendir( path.c_str());

@@ -7,7 +7,7 @@
 
 #include <signal.h>
 
-#include "quicxiasock.hpp"          // QUICXIASocket
+#include "../xia-api-lib/quicxiasock.hpp"          // QUICXIASocket
 #include "dagaddr.hpp"              // Graph
 #include "xcache_quic_server.h"     // XcacheQUICServer
 #include "xcache_icid_handler.h"    // XcacheICIDHandler

@@ -12,9 +12,8 @@ extern "C" {
 #include <string>
 
 #include "xcache_quic.h"
-#include "quicxiasock.hpp"
-
-#include "xiaapi.hpp"
+#include "../xia-api-lib/quicxiasock.hpp"
+#include "../xia-api-lib/xiaapi.hpp"
 
 #define TEST_CHUNK_SIZE 8192
 
