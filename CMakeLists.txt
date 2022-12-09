@@ -24,7 +24,7 @@ endif()
 # XIA codebase
 ExternalProject_Add(xia
     GIT_REPOSITORY https://github.com/XIA-Project/xia-core.git
-    GIT_TAG xia-v2-overlay
+    GIT_TAG xia-v2-overlay-ruilingz
     CONFIGURE_COMMAND ./configure
     BUILD_COMMAND make DEBUG=1
     BUILD_IN_SOURCE 1
