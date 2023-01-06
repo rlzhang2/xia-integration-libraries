@@ -20,7 +20,7 @@
 #include <stdlib.h>
 
 #include "headers/ncid_header.h"
-#define WORKDIR "/home/testpath"
+//#define WORKDIR "/home/testpath"  //default is user's home directory
 #define CHUNKS_RECV_DIR "/picoquic/tmpChunks_recv/"
 
 using namespace std;
@@ -110,7 +110,6 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
                 std::string path;
 		std::string homepath = getenv("HOME");
 		#ifdef WORKDIR
-			printf("workpath is defined");
 			homepath.assign(WORKDIR);
 		#endif
 		std::string tmp_fs = homepath + CHUNKS_RECV_DIR;

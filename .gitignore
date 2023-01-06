@@ -22,7 +22,12 @@ Release
 *.b
 \.*.swp
 *.conf
+*.DS_Store
+TICKET_STORE
+SignatureBin
+tmpContents/
+tmpChunks/
+tmpChunks_recv/
 demo_ticket_store.bin
 build
-client.log
-server.log
+*.log

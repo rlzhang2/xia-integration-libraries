@@ -18,7 +18,7 @@
 #include <utility>
 #include <tuple>
 
-#define WORKDIR "/home/testpath"
+//#define WORKDIR "/home/testpath"  // default WORKDIR is user's home directory
 #define CHUNKS_DIR "/picoquic/tmpChunks/"
 #define SIGNATURE_BIN "/picoquic/tmpSignatureBin/"
 const uint32_t default_chunk_size = 1024 * 1024;
@@ -30,8 +30,6 @@ const uint32_t default_ttl = 0;
 #include <cmath>
 
 #define XID_TYPE  "CID"
-//#define TABLE_SIZE 5000009
-
 
 /**
  * STEP3. Helper Function
