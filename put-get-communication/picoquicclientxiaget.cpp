@@ -28,7 +28,7 @@ extern "C" {
 #define CONTROL_PORT "8295"
 #define CONTROL_IP "172.64.0.31"
 #define CONTENT_STORE "CONTENT_STORE"
-#define WORKDIR "WORKDIR"
+//#define WORKDIR "WORKDIR"
 
 int cnx_handler (struct addr_info_t &test_from_addr, 
 		 struct addr_info_t &test_to_addr, LocalConfig &conf) {
@@ -40,8 +40,12 @@ int cnx_handler (struct addr_info_t &test_from_addr,
 	vector <string> xid_lst;
 	std::string homepath = getenv("HOME");
 	auto confile = LocalConfig(CONFFILE);
-	std::string tmpContent_f = confile.get(WORKDIR) + confile.get(CONTENT_STORE);
-	std::cout<< "local config path" <<tmpContent_f.c_str()<<std::endl;
+	#ifdef WORKDIR
+                homepath.assign(WORKDIR);
+        #endif
+        std::string tmpContent_f = homepath  + confile.get(CONTENT_STORE);
+	//std::cout<< "local config path" <<tmpContent_f.c_str()<<std::endl;
+
 	//quic client variables
         uint64_t current_time;
 	struct callback_context_t callback_context;
