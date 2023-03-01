@@ -28,7 +28,6 @@ extern "C" {
 #define THEIR_ADDR "THEIR_ADDR" // The THEIR_ADDR entry in config file
 #define CLIENT_AID "CLIENT_AID" // The CLIENT_AID entry in config file
 #define CONTENT_STORE "CONTENT_STORE"
-//#define WORKDIR "WORKDIR"
 #define IFNAME "IFNAME"
 #define CONTROL_PORT "8295"
 #define CONTROL_IP "172.64.0.31"
@@ -49,10 +48,14 @@ int cnx_handler (struct addr_info_t &test_from_addr,
 	std::string homepath = getenv("HOME");
 	#ifdef WORKDIR
                         homepath.assign(WORKDIR);
-                #endif
+        #endif
         std::string tmpContent_f = homepath  + confile.get(CONTENT_STORE);
 	vector <string> xid_lst;
         xid_lst = contentChunkIDs(tmpContent_f);
+
+	for (int i=0; i<xid_lst.size(); i++){
+                        std::cout<<"XID: "<< xid_lst[i].c_str()<<endl;
+	}
 
 	picoquic_quic_t *quic_client;
 

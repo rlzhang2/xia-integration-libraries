@@ -400,39 +400,43 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count)
  **/
 int write_signature(std::string sign, std::string sign_buf)
 {
-	std::string homepath = getenv("HOME");
-     	#ifdef WORKDIR
-        	homepath.assign(WORKDIR);
-     	#endif
-	std::string sign_dir = homepath + SIGNATURE_BIN;
-	std::string sign_name = sign_dir + sign;
+        std::string homepath = getenv("HOME");
+        #ifdef WORKDIR
+                homepath.assign(WORKDIR);
+        #endif 
+        std::string sign_dir = homepath + SIGNATURE_BIN;
+        std::string sign_name = sign_dir + sign;
 
-	//std::cout << "Original Signature "<<sign_buf.c_str()<<endl;
-	ofstream outfile(sign_name.c_str(), ofstream::binary);
-	std::string::size_type fsize= sign_buf.size();
-	
-	outfile.write(reinterpret_cast<char*>(&fsize), sizeof(std::string::size_type));
-	outfile.write(sign_buf.data(), fsize);
+        std::cout << "Original Signature "<<sign_buf.data()<<" length: "<<sign_buf.length()<<endl;
+        ofstream outfile(sign_name.c_str(), ofstream::binary);
+ 
+        std::string::size_type fsize= sign_buf.size(); //get the size to file
+        outfile.write(reinterpret_cast<char*>(&fsize), sizeof(std::string::size_type));
+        outfile.write(sign_buf.data(), fsize); //write data
+        //outfile.write(sign_buf.c_str(), sign_buf.size());
+        outfile.close();
+        
+        //check we upload signation data successfully
+        std::string::size_type  size=0; 
+        ifstream infile(sign_name.c_str(), ifstream::binary);
+        infile.read(reinterpret_cast<char*>(&size), sizeof(size)); //read size
+        std::string str;
+        std::vector<char> buf(size);
+        infile.read(&buf[0], size);
+        str.assign(buf.begin(), buf.end());
+        std::cout <<"READFILE "<< str.data()<<endl;
+        printf("RZ check the signature comparison: %d \n", sign_buf.compare(str));
 
-	outfile.close();
-
-	//check we upload signation data successfully
-	std::string::size_type  size;
-	ifstream infile(sign_name.c_str(), ifstream::binary);
-	infile.read(reinterpret_cast<char*>(&size), sizeof(std::string::size_type));
-	std::string str;
-	std::vector<char> buf(size);
-	infile.read(&buf[0], size);
-	str.assign(buf.begin(), buf.end());
-	//std::cout <<"READFILE "<< str.c_str()<<endl;
-
-	if (sign_buf.compare(str)){
-		std::cout<<"Signature is loaded successfully" <<endl;
-		return -1;
-	}
+        if (sign_buf.compare(str)==0){
+                std::cout<<"Signature is loaded successfully" <<endl;
+                //return -1;
+        } else{
+                std::cout<<"Signature is not matched with original one" <<endl;
+                return -1;
+        }
 
         infile.close();
-	return 0;
+        return 0;
 }
 
 /**
@@ -476,7 +480,7 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count, std::stri
                 return "";
         }
 
-	//sign on the chunkdata
+	//sign on the given chunkdata associated with content URI
         std::string s_uri = publisher.content_URI(content_name);
         std::string s_buf( reinterpret_cast< char const* >(buf), byte_count);
         std::string signature;
@@ -485,9 +489,9 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count, std::stri
                 throw "Failed to sign";
         } else {
                 std::cout<<"------------Signature Information --------------"<<endl<<endl;
-                std::cout<<"2.Check URI " << s_uri.c_str() <<endl;
-                std::cout<<"3.ContentData that signed " <<s_buf.c_str()<<endl;
-                std::cout<<"4.Signature " <<signature.c_str()<<endl;
+                //std::cout<<"2.Check URI " << s_uri.c_str() <<endl;
+                //std::cout<<"3.ContentData that signed " <<s_buf.c_str()<<endl;
+                std::cout<<"4.Signature " <<std::string(signature, sizeof(signature)) <<"Sig_len: "<< signature.length()<<endl;
                 std::cout<<"------------------------------------------------"<<endl;
 
                 //write the signature into temp binary file for client to retrieve
@@ -641,7 +645,8 @@ vector <string> contentChunkIDs(std::string file){
         cid_list_t chunkIDs = chunk_file(file, TEST_CHUNK_SIZE, default_ttl);
 	for (int i=0; i<chunkIDs.size(); i++) {
                 std::size_t bFound = chunkIDs[i].find(NCIDtype);
-                std::string tmp_xid = (bFound != std::string::npos) ?  NCIDtype + chunkIDs[i].substr(chunkIDs[i].find("::")+2) : chunkIDs[i];
+                //std::string tmp_xid = (bFound != std::string::npos) ?  NCIDtype + chunkIDs[i].substr(chunkIDs[i].find("::")+2) : chunkIDs[i];
+		std::string tmp_xid = chunkIDs[i]; //Do I need the first part of string
 		xidLst.emplace_back(tmp_xid);
 	}
         return xidLst;

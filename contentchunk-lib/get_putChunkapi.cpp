@@ -67,20 +67,20 @@ void put_chunk(picoquic_cnx_t* connection,
 
         //if the process is for PUT request, then we will also send cid chunk data
         if(process_type.compare("PUT")==0) {
-		printf("%" PRIx64 ": ", picoquic_val64_connection_id(picoquic_get_logging_cnxid(connection)));
+		printf("%" PRIx64 ": \n", picoquic_val64_connection_id(picoquic_get_logging_cnxid(connection)));
 		for (int i=0; i<xid_lst.size(); i++){
-                        std::cout<<"CID: "<< xid_lst[i].c_str()<<endl;
+                        std::cout<<"XID: "<< xid_lst[i].c_str() <<" length: "<< xid_lst[i].length()<<endl;
                         context->xid.push_back(xid_lst[i]); //assign XIDs to context
                         cid_data = cid_data.append(xid_lst[i]);
                         
-                        //get the current CID
+                        //get the current XID
                         char tmpdata[strlen(xid_lst[i].c_str())];
                         strcpy(tmpdata, xid_lst[i].c_str());
 
-			//get current CID data
+			//get current XID data
 			std::vector<uint8_t> tmpChunkData;
                 	tmpChunkData = get_chunkdata(xid_lst[i], TEST_CHUNK_SIZE);
-         		printf("Now Calculated  %ld CID Data!!! \n", tmpChunkData.size());
+         		printf("Now Calculated  %ld XID Data!!! \n", tmpChunkData.size());
 
                 //Prefix CID data to the chunk content data, so tmpChunkData is completed cid putData
                 tmpChunkData.insert(tmpChunkData.begin(), tmpdata, tmpdata+sizeof(tmpdata));
@@ -104,88 +104,121 @@ void put_chunk(picoquic_cnx_t* connection,
  *        length: length of data received
  * @return: int 0 if successful otherwise -1
  * */
+
 int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
         uint8_t* bytes, size_t length, string xid_requested, string process_type) {
-	std::cout<<"--------: "<<__FUNCTION__<<"------"<<endl;
+        std::cout<<"--------function: "<<__FUNCTION__<<"------"<<endl;
                 std::string path;
-		std::string homepath = getenv("HOME");
-		#ifdef WORKDIR
-			homepath.assign(WORKDIR);
-		#endif
-		std::string tmp_fs = homepath + CHUNKS_RECV_DIR;
-		size_t found;
-		std::vector<uint8_t> datapart_tmp;
-		FILE *cf;
+                std::string homepath = getenv("HOME");
+                #ifdef WORKDIR
+                        homepath.assign(WORKDIR);
+                #endif
+                std::string tmp_fs = homepath + CHUNKS_RECV_DIR;
+                size_t found;
+                int type_offset=0;
+                std::vector<uint8_t> datapart_tmp;
+                FILE *cf;
 
-		//Validate data received: calculate the SHA1 of data received, then match it with the requested CID
-		unsigned char digest[SHA_DIGEST_LENGTH];
-        	char digest_string[SHA_DIGEST_LENGTH*2+1];
+                std::cout<<"Check store chunkID: "<<xid_requested.c_str()<<endl;
+		printf("!!!!RZ Check the received total length: %zu \n", length); //   --PASS
+                //Validate data received: calculate the SHA1 of data received, then match it with the requested CID
 
-		//for PUT: separate the CID with data now
-		if(process_type.compare("PUT")==0){
-			char datapart[length-43];
-                        memcpy(datapart, bytes+44, length-44);
-                        datapart[length-44] = 0;
+                unsigned char digest[SHA_DIGEST_LENGTH];
+                char digest_string[SHA_DIGEST_LENGTH*2+1];
 
-			string sdatapart(datapart);
-			//std::cout<<"Check PUT data part" <<sdatapart.c_str()<<endl;
-				
-			datapart_tmp.insert(datapart_tmp.begin(), datapart, datapart + sizeof(datapart));
-			SHA1(datapart_tmp.data(),length-44, digest);
-		} else {
-                	SHA1(bytes,length, digest);
-		}
+                //for PUT: separate the CID with data, also error if total buf length is less than  XID  length
+                if ( process_type.compare("PUT")==0 ){
+			if (length > 44) {
+                        	//since both CID and NCID are defined as a fixed length
+
+				//TO REMOVE :for testing 
+                        	if (xid_requested.find("NCID:") != string::npos){
+                                	std::cout<<"TEST Check a NCID type content !!!"<<xid_requested.c_str()<<endl;
+                        	}
+				 type_offset = (xid_requested.find("NCID:") != string::npos) ? 2*43 : 43;
+
+                        	char datapart[length-type_offset];
+				memcpy(datapart, bytes+(type_offset+1), length-(type_offset+1));
+                        	datapart[length-(type_offset+1)] = 0; //set the last position to null to terminate
+
+				//TO REMOVE:
+                        	string sdatapart(datapart);
+                        	std::cout<<"TEST Check PUT data part" <<sdatapart.c_str()<<endl; // --PASS
+
+                        	datapart_tmp.insert(datapart_tmp.begin(), datapart, datapart + sizeof(datapart));
+				SHA1(datapart_tmp.data(),length-(type_offset+1), digest);
+
+			} else {
+				printf("Invalid NCID data format on  put operation!!"); //incorrect ncid format to put
+                        	return -1;
+			}
+                } else {
+                        SHA1(bytes,length, digest);
+                }
 
                 hex_digest(digest, sizeof(digest), digest_string, sizeof(digest_string));
                 std::string data_hex = digest_string;
-                //std::cout << "Receiver get datahash hexstring calculated: " << data_hex.c_str()<< endl;
+                std::cout << "Receiver hex-datahash calculated : " << data_hex.c_str()<< endl;
 
-		//requested CID
-		found = xid_requested.find_last_of(':');
+               //valid signature for NCID request
+                if (!(xid_requested.rfind("::") == string::npos)) {
+                        std::cout<<"NCID chunk to validate Signature HERE!!"<<endl;
+               
+                        //2.validate signature
+                }
+		//valid data for both CID and NCID request
+                if (!(xid_requested.rfind(":") == string::npos)) { 
+			//separate NCID from CID 
+                        found =(xid_requested.rfind("::") != string::npos) ?
+                        		(xid_requested.rfind("::")+1): xid_requested.find_last_of(":");
 
-    		if (!(found == string::npos)) {
-			std::string id_located_upd = xid_requested.substr(found+1);
-			std::string type_located = xid_requested.substr(0,found);
+			//XID hexstring
+                        std::string id_located_upd = xid_requested.substr(found+1);
 
-			//if matched, store data in the server file storage
-                	if (strcmp(data_hex.c_str(), id_located_upd.c_str()) != 0) {
-				printf("Invalid: Data received doesn't match the requested CID %s\n", 
-						id_located_upd.c_str());
-				return -1;
+                        //filepath formated  on NCID/CID
+                        std::string type_located = (xid_requested.rfind("::") != string::npos) ?
+                                xid_requested.substr(0,xid_requested.rfind("::")+2) : xid_requested.substr(0,found+1);
+
+                        //if matched, store data in the server file storage
+                        if (strcmp(data_hex.c_str(), id_located_upd.c_str()) != 0) {
+                                printf("Invalid: Data received doesn't match the requested CID %s\n",
+                                                id_located_upd.c_str());
+                                return -1;
                         } else {
-				path = tmp_fs + type_located  + ":" + data_hex;
-				printf("Valid Content received!! %s\n", path.c_str());
-                                   
-				//load the chunk on local file storage, create path if not existing
-				 if (mkdir(tmp_fs.c_str(), 0777) < 0 && errno != EEXIST) {
-         			       	std::cout <<"ERROR: create the chunk received filepath "<< endl;
-                			return -1;
-       					 }
-				 //store content only if not exists
-				 cf = fopen(path.c_str(), "rb");
-				 if (cf == NULL) {
-				 	cf = fopen(path.c_str(), "wb");
-                                 	if (cf == NULL) {
-                                        	return -1;
-                                     		}
-				
-					//For PUT: only the chunk data need to save into storage
-					if(process_type.compare("PUT")==0){
-						fwrite(datapart_tmp.data(), 1, length-44, cf);
-					} else {
-                                		fwrite(bytes, 1, length, cf);
-					}
-				 } else{
-					 printf("content already in storage!!\n");
-				 }
-                                fclose(cf);
+                                path = tmp_fs + type_located  + data_hex;
+                                printf("Valid Content received!! %s\n", path.c_str());
+
+                                //load the chunk on local file storage, create path if not existing
+                                 if (mkdir(tmp_fs.c_str(), 0777) < 0 && errno != EEXIST) {
+                                        std::cout <<"ERROR: create the chunk received filepath "<< endl;
+                                        return -1;
+                                         }
+                                 //store content only if not exists
+                                 cf = fopen(path.c_str(), "rb");
+                                 if (cf == NULL) {
+                                        cf = fopen(path.c_str(), "wb");
+                                        if (cf == NULL) {
+                                                return -1;
+                                                }
+
+                                        //For PUT: only the chunk data need to save into storage
+                                        if(process_type.compare("PUT")==0){
+                                                fwrite(datapart_tmp.data(), 1, length-(type_offset+1), cf);
+                                        } else {
+                                                fwrite(bytes, 1, length, cf);
+                                        }
+                                 } else{
+                                         printf("content already in storage!!\n");
+                                 }
+				fclose(cf);
                                 return 0;
-			}
-		} else { 
-			printf("Invalid Format for requested CID!!"); //request CID doesn't contain content type
-			return -1;
-		}
+                        }
+                } else {
+                        printf("Invalid Format for requested CID!!"); //request CID doesn't contain content type
+                        return -1;
+                }
 }
+
 
 //PUTProcess Client Callback
 static int client_putdata_transfer(picoquic_cnx_t* cnx,
