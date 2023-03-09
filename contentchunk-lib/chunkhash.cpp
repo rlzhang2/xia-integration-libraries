@@ -82,20 +82,15 @@ unsigned int cHash(char* str)
 {
 	uint64_t hash = 0xDEADBEEF;
 	std::string chunkKey(str);
-	std::string cType =XID_TYPE;
+	std::string cType = (chunkKey.find("NCID") != std::string::npos) ? "NCID" : XID_TYPE;
 	cType += ":";
 
 	//handle ncid_sign. only use the signature part since that's uniquie
-	std::size_t ncid_found = chunkKey.find("::");
 	std::size_t found = chunkKey.find(cType);
 	std::string chunkDataKey;
 
-	if (ncid_found != std::string::npos) {
-		 cout <<" Check NCID existing in string "<< ncid_found << endl;
-                cout <<" rest of the signature string "<< chunkKey.substr(ncid_found+2) <<endl;
-		chunkDataKey = chunkKey.substr(ncid_found+2) ;
-	} else if (found != std::string::npos) {
-		cout <<" Check CID existing in string "<< found << endl;
+	if (found != std::string::npos) {
+		cout <<" Check XID existing in string "<< found << endl;
 		cout <<" rest of the string "<< chunkKey.substr(found + cType.length()) <<endl;
 		chunkDataKey = chunkKey.substr(found + cType.length());
 	} else {

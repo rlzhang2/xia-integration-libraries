@@ -18,17 +18,21 @@
 #include <utility>
 #include <tuple>
 
-//#define WORKDIR "/home/testpath"  // default WORKDIR is user's home directory
-#define CHUNKS_DIR "/picoquic/tmpChunks/"
-#define SIGNATURE_BIN "/picoquic/tmpSignatureBin/"
-const uint32_t default_chunk_size = 1024 * 1024;
-const uint32_t default_ttl = 0;
-#define TEST_CHUNK_SIZE 300
+#include "localconfig.hpp"
 #include "headers/ncid_header.h"
 #include "dagaddr.hpp"
 #include "chunkhash.h"
 #include <cmath>
 
+//#define WORKDIR "/home/testpath"  // default WORKDIR is user's home directory
+#define CONFFILE "./conf/local.conf"
+#define CHUNKS_DIR "/picoquic/tmpChunks/"
+#define SIGNATURE_BIN "/picoquic/tmpSignatureBin/"
+const uint32_t default_chunk_size = 1024 * 1024;
+const uint32_t default_ttl = 0;
+#define TEST_CHUNK_SIZE 300
+#define CONTENT_STORE "CONTENT_STORE"
+#define KEY_DIR  "KEY_DIR"
 #define XID_TYPE  "CID"
 
 /**
@@ -50,6 +54,95 @@ void hex_digest(const unsigned char* digest, unsigned digest_len, char* hex_stri
         sprintf(&hex_string[2*i], "%02x", (unsigned int)digest[i]);
     }
     hex_string[hex_string_len-1] = '\0';
+}
+
+
+/**
+ * Check if the public key exists in the path
+ * @param filename
+ * return true if public key file is accessible
+ */
+bool pubkfile_exists(std::string path)
+{
+        struct stat statbuf;
+
+        if( stat(path.c_str(), &statbuf) ==0) {
+                return true;
+        } else{
+                std::cout << "ERROR: failed to access pubkey" << std::endl;
+                return false;
+        }
+}
+
+
+/**
+ * @content receiver accesses pubkey
+ */
+std::string get_pubkey(std::string keypath)
+{
+        char pubkeybuf[MAX_PUBKEY_SIZE];
+        uint16_t pubkeylen = MAX_PUBKEY_SIZE;
+        memset(pubkeybuf, 0, pubkeylen);
+
+        // If the pubkey is not available, try getting it
+        if(!pubkfile_exists(keypath)) {
+		printf("ERROR: failed to access pubkey file");
+                        return "";
+        }
+        // Find the pubkey file in the PublisherKey's credential directory
+        if(xs_readPubkeyFile(keypath.c_str(), pubkeybuf, &pubkeylen) == -1) {
+                printf("PublisherKey::pubkey() cannot read key from %s\n",
+                                keypath.c_str());
+                return "";
+        }
+        std::string pubkeystr(pubkeybuf, pubkeylen);
+        return pubkeystr;
+}
+
+/**
+ * @content publisher key accesses path
+ */
+std::string get_keypath(std::string publisherName, int is_privkey)
+{
+        auto conf = LocalConfig(CONFFILE);
+        std::string keydir = conf.get(KEY_DIR);
+        std::string homepath = getenv("HOME");
+        #ifdef WORKDIR
+                homepath.assign(WORKDIR);
+        #endif
+        std::string publisher_keydir = homepath +  keydir + publisherName;
+
+        std::string keyfilepath = (is_privkey == 1) ? publisher_keydir + "/" + publisherName + ".priv"
+                                                   : publisher_keydir + "/" + publisherName + ".pub";
+        return keyfilepath;
+}
+
+/**
+ * @receiver verify the digest with public key access
+ */
+
+bool isValidSign(std::string publisherName,
+		std::string content_URI,
+                const std::string &content,
+                const std::string &signature)
+{
+	std::string pubkeyfile = get_keypath(publisherName, 0);
+        std::string data = content_URI + content;
+
+        // Get the digest of data
+        uint8_t digest[SHA_DIGEST_LENGTH];
+        xs_getSHA1Hash((const unsigned char *)data.c_str(), data.size(),
+                        digest, sizeof(digest));
+
+	std::string str_digest;
+	str_digest.assign((const char*)digest, (size_t)sizeof(digest));
+	if(xs_isValidDigestSignature(pubkeyfile.c_str(),
+                                (const unsigned char *)str_digest.c_str(), str_digest.size(),
+                                (unsigned char *)signature.c_str(), signature.size()) != 1) {
+                std::cout << "ERROR invalid signature" << std::endl;
+                return false;
+        }
+        return true;
 }
 
 
@@ -98,7 +191,6 @@ std::pair<string, uint8_t*> get_chunkhash(std::string cid, std::vector<uint8_t>&
 
 std::vector<uint8_t> get_chunkdata(std::string cid, size_t cSize)
 {
-
     std::vector<uint8_t> cData;
 
     //Check to see if CID content is available on xcache local:
@@ -108,23 +200,43 @@ std::vector<uint8_t> get_chunkdata(std::string cid, size_t cSize)
      #endif
      std::string CID_path = homepath + CHUNKS_DIR + cid;
 
-     std::ifstream tmp_fin(CID_path.c_str(), std::ios::in | std::ios::binary);
+      std::ifstream tmp_fin(CID_path.c_str(), std::ios::in | std::ios::binary);
      if (tmp_fin.good()){ //check if the file is local in the path
 
-	     //start stream to prepare to sent to requester
+             //start stream to prepare to sent to requester
              tmp_fin.seekg(0, std::ios::end); //take the lenghth of the file
              size_t f_size = tmp_fin.tellg();
              tmp_fin.seekg(0, std::ios::beg);
 
-	     char dataCID[f_size];
+             char dataCID[f_size];
              tmp_fin.read(dataCID, sizeof dataCID);
              tmp_fin.close();
 
              printf("Reading  %ld bytes of data \n", sizeof(dataCID));
              cData.insert(cData.begin(), dataCID, dataCID + sizeof(dataCID));
-//	     cout<<"Data retrieved from chunkstorage :" <<cData.data()<<endl;
-     } else
-     {
+	  //cout<<"Data retrieved from chunkstorage :" <<cData.data()<<endl;
+         //For NCID, append the signature also
+	 std::string sType("NCID:");
+         if (cid.find("NCID:") != std::string::npos) {
+                std::string datahex_loc = cid.substr(sType.length());
+
+                //read the signature from storage
+                std::string sign_dir = homepath + SIGNATURE_BIN;
+                std::string sign_name = sign_dir + datahex_loc;
+
+                std::string::size_type  sig_size=0;
+                ifstream sig_f(sign_name.c_str(), ifstream::binary);
+                sig_f.read(reinterpret_cast<char*>(&sig_size), sizeof(sig_size)); //read size
+                std::string sig_str;
+                std::vector<char> sig_buf(sig_size);
+                sig_f.read(&sig_buf[0], sig_size);
+                sig_str.assign(sig_buf.begin(), sig_buf.end());
+
+                //now append the signature data to chunk
+                cData.insert(cData.begin(), sig_str.data(), sig_str.data()+sig_str.length());
+                //std::cout <<"READFILE after appending signature "<< cData.data()<<endl;
+        }
+     } else {
 	     cout<<"No matched Chunk Content found for "<<cid.c_str()<<endl;
      }
      return cData;
@@ -187,85 +299,80 @@ std::tuple<string, std::vector<uint8_t>, size_t> load_chunk(std::string cid, std
  * 			    2). hash of NCID content data recieved matches the NCID hexstring of chunk data hash
  * 			    3). signature on the signed data are valid
  * */
-bool valid_chunk_signature (std::string ncid_sign, std::string publisherName, std::string contentName, std::vector<uint8_t>& data)
+bool valid_chunk_signature (std::string ncid_sign, std::string &signature, size_t dSize, std::string datahex, std::vector<uint8_t>& data)
 {
-	//valid the NCID header
+	auto conf = LocalConfig(CONFFILE);
+	std::string content_fname;
+        content_fname = conf.get(CONTENT_STORE);
 	struct stat info;
 	std::string homepath = getenv("HOME");
 	#ifdef WORKDIR
-        	homepath.assign(WORKDIR);
-     	#endif
-        std::string content_dir = homepath + CHUNKS_DIR;
-        std::string path = content_dir + ncid_sign;
-	size_t pos_ncid = ncid_sign.find("NCID:");
+            homepath.assign(WORKDIR);
+        #endif
+	std::string content_dir = homepath + CHUNKS_DIR;	
+	size_t post_ncid = ncid_sign.find("NCID:");
+	if (post_ncid != std::string::npos) {
 
-        if (pos_ncid != std::string::npos) {
-		size_t post_sign = ncid_sign.find("::");
-		std::string ncid_located = ncid_sign.substr(0, post_sign);
-		std::string datahex_located = ncid_sign.substr(post_sign+2);
-		Publisher publisher(publisherName);
+	 //Validation FirstPart: Signature
+		//Readin publisherName from '/picoquic/tmpContents/CNN:2022:01:19:world:covidnewsupdate.txt'
+		size_t found_p = content_fname.find(':');
+       		if (found_p != std::string::npos) {
+			std::string publish_path = content_fname.substr(0, found_p);
+                	std::size_t found = publish_path.find_last_of("/\\");
+                	std::string publisherName = publish_path.substr(found+1, found_p);
+                	std::string contentName = content_fname.substr(found_p + 1);
+		//1. get same hash(content_URI +data)
+			Publisher publisher(publisherName);
+			std::string content_uri = publisher.content_URI(contentName);
+			//std::cout<<"1. Verify URI :"<<content_uri.c_str()<<endl;
 
-		//1. receiver could get contentName
-                std::string sURI = publisher.content_URI(contentName);
+		//get digest of chunkdata and uri
+			std::string s( reinterpret_cast< char const* >(data.data()), dSize);
+			//printf("data size: %zu\n", dSize);
+			//std::cout<<"2. Verify contentData: "<<s.c_str()<<endl;
 
-		//2.readin signature binary buffer
-		std::string signbin_dir = homepath + SIGNATURE_BIN;
-        	std::string signbin_name = signbin_dir + datahex_located;
-		
-		std::string::size_type  size;
-	        std::ifstream infile(signbin_name.c_str(), ifstream::binary);
-        	infile.read(reinterpret_cast<char*>(&size), sizeof(std::string::size_type));
-        	std::string signature_str;
-       		std::vector<char> signbuf(size);
-       		infile.read(&signbuf[0], size);
-        	signature_str.assign(signbuf.begin(), signbuf.end());
+			std::string data =content_uri + s;
+			uint8_t digest[SHA_DIGEST_LENGTH];
+        		xs_getSHA1Hash((const unsigned char *)data.c_str(), data.size(),
+                        digest, sizeof(digest));
 
-		//clear after done on this signature
-		signbuf.clear();
+		//3. receiver accesses pubkey dir
+			 std::string pubkeyfile = get_keypath(publisherName, 0);
+                  	 std::string pubkeystr = get_pubkey(pubkeyfile);
+		//4. get signature string
+			//std::cout<<"3. Signature to verify : "<<signature.c_str()<<endl;
+		//5. verify signature
+		        if (isValidSign(publisherName, content_uri, s, signature)){
+                                        printf("Valid Sign!!!\n");
+		//6. verify NCID
+			 std::string calc_name_data = content_uri + datahex;
+			 //now calc the NCID using the same algrithom from publisher
+			 std::string calc_ncid_data = calc_name_data + pubkeystr;
 
-		//Validate1: reciever calcuates NCID from contentName to match the identifier NCID specified in chunkName
-		std::string calc_ncid = publisher.ncid(contentName);
-		if (stat(path.c_str(), &info) < 0 || info.st_size == 0) {
-                                cout << "Failed to located the file: " << ncid_sign.c_str() << endl;
-                                return false;
-                } else {
-			//Validate1: reciever calcuates NCID from contentName to match the identifier NCID specified in chunkName
-			if( calc_ncid == ncid_located ){
-			std::cout << "Validate1).NCID generated from pubkey is equal to the located NCID !!" <<endl;
-			
-			//Validate2.  Hashvalue of data received  matches sign_  part of ncid_sign, which is contenthash
-			if ( valid_chunk_data (ncid_sign.c_str(), data)) {
+        		 char calc_ncidhex[XIA_SHA_DIGEST_STR_LEN];
+        		 int calc_ncidlen = XIA_SHA_DIGEST_STR_LEN;
+        		 xs_getSHA1HexDigest((const unsigned char *)calc_ncid_data.c_str(),
+                         calc_ncid_data.size(), calc_ncidhex, calc_ncidlen);
+        		 assert(strlen(calc_ncidhex) == XIA_SHA_DIGEST_STR_LEN - 1);
+        		 std::string calc_ncidstr(calc_ncidhex);
 
-				std::cout<< "Validate2). NCID content data is valid!!" <<endl;
-				
-				//3.Receiver has the signed data
-				std::string s( reinterpret_cast< char const* >(data.data()), info.st_size);
-				std::cout << "The receiver gets the signed data to validation "<<  s.c_str()<< endl;
-				std::cout << "data Info size " <<info.st_size<<endl;
-
-				//check validation if passed in a incorrect signature
-				//signature_str.assign("This is a invalid signature buf passin");
-
-				//Validate3: Signature valid on contentData
-                        	if (publisher.isValidSignature(sURI, s, signature_str)){
-                                	 std::cout <<"Validate3). Signature is Valid!! "<<endl;
-				 	 return true;
-                        	 } else {
-                                	std::cout <<"Check validataion signature:  Invalid!! "<<endl;
-					return false;
-                        	}
+			 std::cout << "Calcs_ncid : "<< calc_ncidstr.c_str()<<endl;
+			 if( calc_ncidstr == ncid_sign.substr(ncid_sign.find(":") +1) ){
+				std::cout<< "NCID header is valid!!" <<endl;
+				return true;
 			} else {
-				std::cout<< "NCID content data didn't match from sender !!" <<endl;
-				return false;
-			} 
-			
+				std::cout << "Invalid NCID header received !!" <<endl;
+				return false;}
+
+	    		} else {
+                                printf("Invalide Sign\n");
+				return false;}		 
 		} else {
-			std::cout << "Invalid pubkey or contentName !!" <<endl;
-			return false;
-		}
-	    } //end validation 
+                        printf("ERROR: incorrect NCID contentName format readin!!\n");
+                        return false;
+                }
 	} else {
-		std::cout << "No need signature validation process for non NCID content" <<endl;
+		std::cout << "Incorrect NCID header format" <<endl;
 		return false;
 	}
 }
@@ -288,27 +395,19 @@ bool valid_chunk_data (std::string sCid, std::vector<uint8_t>& chunk_data) {
         	homepath.assign(WORKDIR);
      	#endif
         std::string content_dir = homepath + CHUNKS_DIR;
-	std::string cType = "CID";
-        cType += ":";
         std::string path = content_dir + sCid;
         size_t pos_ncid = sCid.find("NCID:");
-	size_t pos_cid =sCid.find(cType);
 
         unsigned char digest[SHA_DIGEST_LENGTH];
         char digest_string[SHA_DIGEST_LENGTH*2+1];
-	//get the chunk identifer
-	if (pos_ncid != std::string::npos) {
-                size_t post_sign = sCid.find("::");
-                datahex_located = sCid.substr(post_sign+2);
-		std::cout<<"NCID chunk identifer " <<datahex_located << endl;
-	} else if (pos_cid != std::string::npos) {
-		datahex_located = sCid.substr(cType.length());
-		std::cout<<"CID chunk identifer " <<datahex_located << endl;
-	}
-	else {
-		std::cout<< "Could not recognized the content chunk identifier" << endl;
-		return false;
-	}
+	//get the chunk identifer (N)CID
+	
+	std::string cType = (pos_ncid != std::string::npos) ? "NCID" : "CID";
+	cType += ":";
+
+	datahex_located = sCid.substr(cType.length());
+	std::cout<<"XID chunk identifer " <<datahex_located << endl;
+
 	//calculate the hash of chunk content located
         if (stat(path.c_str(), &info) < 0 || info.st_size == 0) {
         	cout << "Failed to located the file: " << sCid.c_str() << endl;
@@ -406,17 +505,18 @@ int write_signature(std::string sign, std::string sign_buf)
         #endif 
         std::string sign_dir = homepath + SIGNATURE_BIN;
         std::string sign_name = sign_dir + sign;
-
-        std::cout << "Original Signature "<<sign_buf.data()<<" length: "<<sign_buf.length()<<endl;
+	
+	//write buffer
+        //std::cout << "Original Signature "<<sign_buf.data()<<" length: "<<sign_buf.length()<<endl;
         ofstream outfile(sign_name.c_str(), ofstream::binary);
  
+	//write buffer to file
         std::string::size_type fsize= sign_buf.size(); //get the size to file
         outfile.write(reinterpret_cast<char*>(&fsize), sizeof(std::string::size_type));
         outfile.write(sign_buf.data(), fsize); //write data
-        //outfile.write(sign_buf.c_str(), sign_buf.size());
         outfile.close();
         
-        //check we upload signation data successfully
+        //check we upload signation data we just stored  successfully
         std::string::size_type  size=0; 
         ifstream infile(sign_name.c_str(), ifstream::binary);
         infile.read(reinterpret_cast<char*>(&size), sizeof(size)); //read size
@@ -424,12 +524,11 @@ int write_signature(std::string sign, std::string sign_buf)
         std::vector<char> buf(size);
         infile.read(&buf[0], size);
         str.assign(buf.begin(), buf.end());
-        std::cout <<"READFILE "<< str.data()<<endl;
-        printf("RZ check the signature comparison: %d \n", sign_buf.compare(str));
-
+        //std::cout <<"READFILE "<< str.data()<<endl;
+        printf("Check the signature comparison: %d \n", sign_buf.compare(str));
+	
         if (sign_buf.compare(str)==0){
                 std::cout<<"Signature is loaded successfully" <<endl;
-                //return -1;
         } else{
                 std::cout<<"Signature is not matched with original one" <<endl;
                 return -1;
@@ -455,68 +554,65 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count, std::stri
         	homepath.assign(WORKDIR);
      	#endif
 	std::string content_dir = homepath + CHUNKS_DIR;
+	std::string sType("NCID:");
 
 	//create a hash of pubkey+contentName
 	Publisher publisher(publisher_name);
 	
-        std::string s_ncid = publisher.ncid(content_name);
-	if(s_ncid.size() == 0) 
-	{
- 		std::cout << "Failed to create NCID for Publisher "<< publisher_name.c_str() << " Content: " << content_name.c_str() <<endl;
-        }
-	std::cout << "Before signature - 1.Check s_ncid from publisher: "<< s_ncid.c_str()<<endl;
-
-	//test to create a content data hash to use a uniqueContentKey
+	//create a content data hash to use a uniqueContentKey
 	unsigned char digest[SHA_DIGEST_LENGTH];
         char digest_string[SHA_DIGEST_LENGTH*2+1];
 	SHA1(buf, byte_count, digest);
 	hex_digest(digest, sizeof(digest), digest_string, sizeof(digest_string));
 	std::string s_datahex = digest_string;
 
-	std::cout<<"Check contentdata hexstring: " <<s_datahex.c_str() <<" ByteCount: "<<byte_count<<endl;
+	std::cout<<"Content data hexstring: " <<s_datahex.c_str() <<" ByteCount: "<<byte_count<<endl;
+
+	///construct unique new_ncid from SHA1(pubkey+ publisherName +content_name_data)
+	std::string content_name_data = content_name + s_datahex;
+	std::string s_ncid = publisher.ncid(content_name_data);
+        if(s_ncid.size() == 0)
+        {
+                std::cout << "Failed to create NCID for Publisher "<< publisher_name.c_str() << " Content: " << content_name.c_str() <<endl;
+        }
+        std::cout << "1.s_ncid from publisher: "<< s_ncid.c_str()<<endl;
 
         if (mkdir(content_dir.c_str(), 0777) < 0 && errno != EEXIST) {
                 std::cout <<"error create the content filepath "<< endl;
                 return "";
         }
 
-	//sign on the given chunkdata associated with content URI
-        std::string s_uri = publisher.content_URI(content_name);
+	//step2. sign on the given chunkdata associated with content URI
+	std::string s_uri = publisher.content_URI(content_name);
         std::string s_buf( reinterpret_cast< char const* >(buf), byte_count);
         std::string signature;
         if(publisher.sign(s_uri, s_buf, signature) == -1) {
                 printf("Unable to sign %s\n", s_uri.c_str());
                 throw "Failed to sign";
         } else {
-                std::cout<<"------------Signature Information --------------"<<endl<<endl;
-                //std::cout<<"2.Check URI " << s_uri.c_str() <<endl;
-                //std::cout<<"3.ContentData that signed " <<s_buf.c_str()<<endl;
-                std::cout<<"4.Signature " <<std::string(signature, sizeof(signature)) <<"Sig_len: "<< signature.length()<<endl;
-                std::cout<<"------------------------------------------------"<<endl;
+              //  std::cout<<"------------Signature Information --------------"<<endl<<endl;
+              //  std::cout<<"2.Check URI " << s_uri.c_str() <<endl;
+              //  std::cout<<"3.ContentData that signed " <<s_buf.c_str()<<endl;
+              //  std::cout<<"4.Signature " <<signature.c_str()<<endl;
+              //  std::cout<<"------------------------------------------------"<<endl;
 
-                //write the signature into temp binary file for client to retrieve
-                int signWritten = write_signature(s_datahex, signature);
+                //write the signature into temp binary file client to retrieve
+                size_t sign_pos = (s_ncid.find(sType) != std::string::npos) ?  sType.length(): 5;
+                int signWritten = write_signature(s_ncid.substr(sign_pos), signature);
                 if (signWritten ==0){
                         std::cout <<"Have signature upload onto local to ready for client retrieval" << endl;
                 }
         }
-
-	//make unique key on the hash,concatinate the contentdata hashstring
-	std::string path_spliter{"::"};
-	std::string ncid_sign = s_ncid + path_spliter + s_datahex;
-	std::cout <<"6.Check chunk path: " << ncid_sign.c_str() <<endl;
-        std::string chunk_name = content_dir + ncid_sign  ;
-	
 	//write down chunk onto local
+        std::string chunk_name = content_dir + s_ncid ;
         FILE *cf = fopen(chunk_name.c_str(), "wb");
         if (cf == NULL) {
                 return "";
         }
-
         fwrite(buf, 1, byte_count, cf);
         fclose(cf);
 
-        return ncid_sign;
+        return s_ncid;
 }
 
 /**
@@ -566,14 +662,12 @@ cid_list_t make_chunks(std::string filename, uint32_t chunk_size)
         	std::string content_name = filename.substr(found_p + 1);
 
 		while (!feof(f)) {
-			if ((byte_count = fread(buf, sizeof(unsigned char), chunk_size, f)) > 0) {
+			if ((byte_count = fread(buf, sizeof(unsigned char), chunk_size-128, f)) > 0) {
 				if ((cid = write_chunk(buf, byte_count, publisher_name, content_name)) == "") {
 					fclose(f);
 					cids.clear();
 					return cids;
 					}
-				//add in concatination: ncid +"::"+ signature
-				std::cout << "HERE check the NCID "<< cid.c_str()<<endl;
 				cids.emplace_back(cid);
 				}
 			}
@@ -641,11 +735,8 @@ void print_chunklst (const vector<string>& cid_list_t)
 vector <string> contentChunkIDs(std::string file){
 	std::cout<<"Build list of  chunkXIDs from the content ----"<<std::endl;
 	vector <string> xidLst;
-	std::string NCIDtype("NCID:");
         cid_list_t chunkIDs = chunk_file(file, TEST_CHUNK_SIZE, default_ttl);
 	for (int i=0; i<chunkIDs.size(); i++) {
-                std::size_t bFound = chunkIDs[i].find(NCIDtype);
-                //std::string tmp_xid = (bFound != std::string::npos) ?  NCIDtype + chunkIDs[i].substr(chunkIDs[i].find("::")+2) : chunkIDs[i];
 		std::string tmp_xid = chunkIDs[i]; //Do I need the first part of string
 		xidLst.emplace_back(tmp_xid);
 	}
