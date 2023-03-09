@@ -46,16 +46,14 @@ int setContextXID(picoquic_cnx_t* connection, callback_context_t* context, uint8
 	//check streaming putdata from Client
 	char temp_data[length];
         memcpy(temp_data, bytes, length);
-        //temp_data[length] = 0;
-	printf("ServerCallback: Client sent putData: \n %s %zu\n", temp_data, length);
+	//printf("ServerCallback: Client sent putData: \n %s %zu\n", temp_data, length);
 
         //separate prefix XID type from content chunkdata; context->xid capture all xids
         string sXidData(temp_data);
 
-	//case for Named Content ID  formated as  NCID: hex(name-pubkey)::datahash
-        string sXid= (sXidData.find("NCID:") != string::npos) ? sXidData.substr(0,2*43+1) : sXidData.substr(0,44);
+        string sXid= (sXidData.find("NCID:") != string::npos) ? sXidData.substr(0,44+1) : sXidData.substr(0,44);
         context->xid.push_back(sXid);
-	//std::cout<<"Context xid size: "<< context->xid.size()<<endl;
+	std::cout<<"Context xid size: "<< context->xid.size() <<" tmpData size: "<<sizeof(temp_data) <<" length: "<<length<<endl;
 
 	//release mem
 	memset(temp_data, 0, sizeof(temp_data));
