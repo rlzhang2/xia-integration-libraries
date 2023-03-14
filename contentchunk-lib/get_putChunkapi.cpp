@@ -48,7 +48,7 @@ void put_chunk(picoquic_cnx_t* connection,
 
 	if(process_type.compare("GET")==0){
 	 for (int i=0; i<xid_lst.size(); i++){
-                        std::cout<<"CID: "<< xid_lst[i].c_str()<<endl;
+                        std::cout<<"XID: "<< xid_lst[i].c_str()<<endl;
                         context->xid.push_back(xid_lst[i]); //assign XIDs to context
 			cid_data = cid_data.append(xid_lst[i]);
 	 		}
@@ -56,7 +56,7 @@ void put_chunk(picoquic_cnx_t* connection,
 		char data[cid_data.length()];
                 strcpy(data, cid_data.c_str());
 
-        	//printf("Sending CIDData length: %ld Data length: %ld CID string %s \n", cid_data.length(), sizeof(data), data);
+        	printf("Sending CIDData length: %ld Data length: %ld CID string %s \n", cid_data.length(), sizeof(data), data);
 		if(picoquic_add_to_stream(connection,
                                 stream_id, // Any arbitrary stream ID client picks
                                 (uint8_t*)data, sizeof(data), // data to be sent
@@ -79,7 +79,7 @@ void put_chunk(picoquic_cnx_t* connection,
 
 			//get current XID data
 			std::vector<uint8_t> tmpChunkData;
-                	tmpChunkData = get_chunkdata(xid_lst[i], TEST_CHUNK_SIZE);
+                	tmpChunkData = get_chunkdata(xid_lst[i], process_type, TEST_CHUNK_SIZE);
          		printf("Now Calculated  %ld XID Data!!! \n", tmpChunkData.size());
 
                 //Prefix CID data to the chunk content data, so tmpChunkData is completed cid putData
@@ -115,12 +115,11 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
                 std::string tmp_fs = homepath + CHUNKS_RECV_DIR;
                 size_t found;
                 int type_offset=0;
-                std::vector<uint8_t> datapart_tmp;
-		std::string s_signpart;
+		int sign_offset=  (xid_requested.find("NCID:") != string::npos) ? 128 : 0; //NCID:RSA signature size due to 1024 bit RSA key used
                 FILE *cf;
 		bool b_StoreData = new bool();  //default to false
 
-		//printf("Check the received total length: %zu \n", length); //   --PASS
+		std::pair<string, vector<uint8_t> > xid_tmp;
 
                 //Validate data received: calculate the SHA1 of data received, then match it with the requested CID
                 unsigned char digest[SHA_DIGEST_LENGTH];
@@ -129,34 +128,23 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
                 //for PUT: separate the CID with data, also error if total buf length is less than  XID  length
                 if ( process_type.compare("PUT")==0 ){
 			//fixed length on xid type 40byte, NCID has signatured attached
-			type_offset = (xid_requested.find("NCID:") != string::npos) ? 44+128 : 43;
+			type_offset = (xid_requested.find("NCID:") != string::npos) ? xid_requested.length()+sign_offset-1 : xid_requested.length()-1;
+
 			if (length > type_offset +1 ) {//since both CID and NCID are defined as a fixed length
-
-				//NCID signature part
-				if (xid_requested.find("NCID:") != string::npos){
-					char signpart[129];
-                                	memcpy(signpart, bytes+45, 128);
-					signpart[128]=0;//last character
-					s_signpart.assign(signpart, signpart+128);
-					//std::cout<<"Signature part: "<<s_signpart<<endl;
-				}
-
-				//data part
-                        	char datapart[length-type_offset];
-				memcpy(datapart, bytes+(type_offset+1), length-(type_offset+1));
-                        	datapart[length-(type_offset+1)] = 0; //set the last position to null to terminate
-				string sdatapart(datapart);
-                        	//std::cout<<"Check data part: " <<sdatapart.c_str()<<endl; // --PASS
-
-                        	datapart_tmp.insert(datapart_tmp.begin(), datapart, datapart + sizeof(datapart));
-				SHA1(datapart_tmp.data(),length-(type_offset+1), digest);
-
+				xid_tmp =get_data_signature(xid_requested, bytes, length, sign_offset, process_type);
+				SHA1((get<1>(xid_tmp)).data(),length-(type_offset+1), digest);
 			} else {
 				printf("Invalid NCID data format on  put operation!!"); //incorrect ncid format to put
                         	return -1;
 			}
-                } else {
-                        SHA1(bytes,length, digest);
+                } else {//GET
+			//for NCID: data sparate signature and chunkdata
+			 if (xid_requested.find("NCID:") != string::npos){
+				xid_tmp =get_data_signature(xid_requested, bytes, length, sign_offset, process_type);
+                                SHA1((get<1>(xid_tmp)).data(),length-sign_offset, digest);
+			 } else {
+                        	SHA1(bytes,length, digest);
+			 }
                 }
 
                 hex_digest(digest, sizeof(digest), digest_string, sizeof(digest_string));
@@ -170,33 +158,24 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
                 	std::string type_located =  xid_requested.substr(0,found+1);
 
                		//valid NCID content request
-               	if (xid_requested.find("NCID:") != string::npos) {
-               
-			if (valid_chunk_signature (xid_requested, s_signpart, 
-						length-(type_offset+1), data_hex, datapart_tmp)){
-					b_StoreData = true;
-				} else {
-					 printf("Error: Invalid NCID data received!!"); 
-                                         return -1;
-				}
+               		if (xid_requested.find("NCID:") != string::npos) {
+
+				b_StoreData = ( process_type.compare("PUT")==0) ?  
+			     		valid_chunk_signature (xid_requested, get<0>(xid_tmp), 
+						length-(type_offset+1), data_hex, get<1>(xid_tmp))
+					: valid_chunk_signature (xid_requested, get<0>(xid_tmp), 
+                                                length-sign_offset, data_hex, get<1>(xid_tmp));
 			//valid data only for CID
 			} else if ((xid_requested.rfind("CID:") != string::npos)){
                         	//if matched, store data in the server file storage
-                        	if (strcmp(data_hex.c_str(), id_located_upd.c_str()) == 0) {
-					printf("Valid data received from the requested CID %s\n",
-                                                id_located_upd.c_str());
-					b_StoreData = true;
-               			} else {
-                        		printf("Error: Invalid CID data received!!"); 
-                        		return -1;
-                		}
+                        	b_StoreData = (strcmp(data_hex.c_str(), id_located_upd.c_str()) == 0) ? true :false;
 			} else {
 		        	printf("Error: Invalid XID type received!!"); 
 		 		return -1;	
 			}
 
-		//now store chunk
-		if (b_StoreData) {
+			//now store chunk
+			if (b_StoreData) {
                                 //path = tmp_fs + type_located  + data_hex;
 				path = tmp_fs + xid_requested;
                                 printf("Valid Content received!! %s\n", path.c_str());
@@ -216,18 +195,26 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
 
                                         //For PUT: only the chunk data need to save into storage
                                         if(process_type.compare("PUT")==0){
-                                                fwrite(datapart_tmp.data(), 1, length-(type_offset+1), cf);
+                                                fwrite((get<1>(xid_tmp)).data(), 1, length-(type_offset+1), cf);
                                         } else {
-                                                fwrite(bytes, 1, length, cf);
+						 if (xid_requested.find("NCID:") != string::npos){
+					             fwrite((get<1>(xid_tmp)).data(), 1, length-sign_offset, cf);
+						 } else{
+                                                     fwrite(bytes, 1, length, cf);
+						 }
                                         }
                                  } else{
                                          printf("content already in storage!!\n");
                                  }
                                 fclose(cf);
                                 return 0;
-             } //stored
+             		} //stored
+			else {
+				printf("Error: Invalid XID content received!!");
+				return -1;
+			}
 	} else {
-             	printf("Error: Invalid XID format request received!!");
+             	printf("Error: Invalid XID format requested!!");
              	return -1;
               }
 }

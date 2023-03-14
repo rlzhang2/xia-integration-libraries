@@ -45,12 +45,16 @@ void getCIDcontent(uint64_t stream_id, std::string CID, picoquic_cnx_t* connecti
 	//First split all CIDs from initial stream 0:
 	std::vector<std::string> split_cid;
 	//printf("StreamID before loop XIDs %lu \n", stream_id);
-   	for (auto i = 1; i < CID.length()/44 +1; i++)
-   	{
-        	split_cid.push_back(CID.substr((i-1) * 44, 44));
+	if (CID.find(":") == string::npos) {
+		printf("ERROR: Incorrect GET Content XID format\n");
+	} else {
+		int xid_len = 40 + CID.find(":") +1; //add length of xidtype to base xid length
+   		for (auto i = 1; i < CID.length()/xid_len +1; i++)
+   		{
+        	split_cid.push_back(CID.substr((i-1) * xid_len, xid_len));
     		std::vector<uint8_t> tmpChunkData;
-	
-    		tmpChunkData = get_chunkdata(split_cid[i-1].c_str(), TEST_CHUNK_SIZE);
+		std::string processType("GET");	
+    		tmpChunkData = get_chunkdata(split_cid[i-1].c_str(), processType, TEST_CHUNK_SIZE);
 		if (tmpChunkData.size() ==0){
                         cout <<  __FUNCTION__ << " ERROR: no matched Chunk Content available!!" << endl;
                 } else {
@@ -65,7 +69,8 @@ void getCIDcontent(uint64_t stream_id, std::string CID, picoquic_cnx_t* connecti
 				} else{
 					std::cout<<split_cid[i-1]<<" is sent onto stream successfully!!"<<endl;
 				}
-        	}
+        		}
+		}
 	}
 }
 
