@@ -199,7 +199,7 @@ target_link_libraries(picoquicclientxia picoquic-core picoquicxia
     ${CMAKE_DL_LIBS}
 )
 include_directories(picoquicclientxia ${XIADIR}/api/include)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(picoquicclienttxia ${CONF_INCLUDE_DIRS})
 
 set(XCACHEHDR_LIBRARY ${XIADIR}/api/lib/libxcachehdr.so)
 set(XCACHE_LIBRARY ${XIADIR}/api/lib/libxcache.so)
@@ -225,7 +225,7 @@ target_link_libraries(picoquicclientxiaget picoquic-chunk picoquic-core picoquic
     ${CMAKE_DL_LIBS}
 )
 include_directories(picoquicclientxiaget ${XIADIR}/api/include)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(picoquicclientxiaget ${CONF_INCLUDE_DIRS})
 
 find_package( Threads )
 add_executable(picoquicserverxiaget put-get-communication/picoquicserverxiaget.cpp)
@@ -238,7 +238,7 @@ target_link_libraries(picoquicserverxiaget picoquic-chunk picoquic-core picoquic
     ${CMAKE_DL_LIBS}
 )
 include_directories(picoquicserverxiaget ${XIADIR}/api/include)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(picoquicserverxiaget ${CONF_INCLUDE_DIRS})
 
 find_package( Threads )
 add_executable(picoquicclientxiapush put-get-communication/picoquicclientxiapush.cpp)
@@ -251,7 +251,7 @@ target_link_libraries(picoquicclientxiapush picoquic-chunk picoquic-core picoqui
     ${CMAKE_DL_LIBS}
 )
 include_directories(picoquicclientxiapush ${XIADIR}/api/include)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(picoquicclientxiapush ${CONF_INCLUDE_DIRS})
 
 find_package( Threads )
 add_executable(picoquicserverxiapush put-get-communication/picoquicserverxiapush.cpp)
@@ -264,11 +264,11 @@ target_link_libraries(picoquicserverxiapush picoquic-chunk picoquic-core picoqui
     ${CMAKE_DL_LIBS}
 )
 include_directories(picoquicserverxiapush ${XIADIR}/api/include)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(picoquicserverxiapush ${CONF_INCLUDE_DIRS})
 
 find_package( Threads )
 add_executable(xcacheclient  put-get-communication/xcacheclient.cpp)
-target_link_libraries(xcacheclient picoquic-core picoquicxia
+target_link_libraries(xcacheclient picoquic-chunk picoquic-core picoquicxia
   localconfig
   ${XCACHEHDR_LIBRARY}
   ${XCACHE_LIBRARY}
@@ -278,7 +278,7 @@ target_link_libraries(xcacheclient picoquic-core picoquicxia
   ${CMAKE_DL_LIBS}
 )
 include_directories(xcacheclient ${XIADIR}/api/xcache/headers)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(xcacheclient ${CONF_INCLUDE_DIRS})
 
 find_package( Threads )
 add_executable(picoquicserverxia put-get-communication/picoquicserverxia.cpp)
@@ -291,11 +291,11 @@ target_link_libraries(picoquicserverxia picoquic-core picoquicxia
     ${CMAKE_DL_LIBS}
 )
 include_directories(picoquicserverxia ${XIADIR}/api/include)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(picoquicserverxia ${CONF_INCLUDE_DIRS})
 
 find_package( Threads )
 add_executable(xcache ${PICOQUIC_XCACHE_FILES})
-target_link_libraries(xcache picoquic-core picoquicxia
+target_link_libraries(xcache picoquic-chunk picoquic-core picoquicxia
   localconfig
   ${XCACHEHDR_LIBRARY}
   ${XCACHE_LIBRARY}
@@ -308,7 +308,7 @@ target_link_libraries(xcache picoquic-core picoquicxia
 )
 include_directories(xcache ${XIADIR}/api/xcache/headers)
 include_directories(xcache ${XIADIR}/api/xcache)
-include_directories(picoquiccleinetxia ${CONF_INCLUDE_DIRS})
+include_directories(xcache ${CONF_INCLUDE_DIRS})
 
 add_executable(picoquic_ct picoquic_t/picoquic_t.c
  ${PICOQUIC_TEST_LIBRARY_FILES} )

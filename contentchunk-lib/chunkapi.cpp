@@ -25,7 +25,7 @@
 #include <cmath>
 
 //#define WORKDIR "/home/testpath"  // default WORKDIR is user's home directory
-#define CONFFILE "./conf/local.conf"
+#define CONFFILE "local.conf"
 #define CHUNKS_DIR "/picoquic/tmpChunks/"
 #define SIGNATURE_BIN "/picoquic/tmpSignatureBin/"
 const uint32_t default_chunk_size = 1024 * 1024;
@@ -299,44 +299,46 @@ std::vector<uint8_t> get_chunkdata(std::string cid,string processType, size_t cS
  * @return tuple  - inlude elements:chunkfile path to retrieve the chunk; chunkdata, and chunk datasize
  *                e.g. use std::get<0>(mytuple) to retrieve chunkfile path from returned mytuple
  * */
-
 std::tuple<string, std::vector<uint8_t>, size_t> load_chunk(std::string cid, std::vector<uint8_t>& data)
 {
-	struct stat info;
-	int rc;
-	std::string homepath = getenv("HOME");
-	#ifdef WORKDIR
-        	homepath.assign(WORKDIR);
-     	#endif
-	std::string content_dir = homepath + CHUNKS_DIR;
-	std::string path = content_dir + cid;
+        struct stat info;
+        int rc;
+        std::string homepath = getenv("HOME");
+        #ifdef WORKDIR
+                homepath.assign(WORKDIR);
+        #endif
+        std::string content_dir = homepath + CHUNKS_DIR;
+        std::string path = content_dir + cid;
 
-	if (stat(path.c_str(), &info) < 0 || info.st_size == 0) {
-		cout << "Failed to located the file: " << cid.c_str() << endl;
-		return {};
-	}
-	cout << "Start fetching data from "<< path.c_str() << " of size " << info.st_size << endl;
+        std::vector<uint8_t> tmp;
 
-	FILE *f = fopen(path.c_str(), "rb");
 
-	data.reserve(info.st_size);
-	int offset = 0;
+        if (stat(path.c_str(), &info) < 0 || info.st_size == 0) {
+                cout << "Failed to located the file: " << cid.c_str() << endl;
+        }
+        cout << "Start fetching data from "<< path.c_str() << " of size " << info.st_size << endl;
 
-	if (!f) {
-		return {};
-	}
+        FILE *f = fopen(path.c_str(), "rb");
 
-	while (!feof(f)) {
-		unsigned char *p = data.data();
-		rc = fread(p + offset, 1, info.st_size, f);
-		offset += rc;
-	}
+        data.reserve(info.st_size);
+        int offset = 0;
 
-	std::vector<uint8_t> my_vector(&data[0], &data[offset]);
-	auto chunkInfo =std::make_tuple(path,my_vector, info.st_size);
-	fclose(f);
-	
-	return chunkInfo;
+        if (!f) {
+                auto chunkInfo =std::make_tuple(path,tmp, 0);
+                return chunkInfo;
+        }
+
+        while (!feof(f)) {
+                unsigned char *p = data.data();
+                rc = fread(p + offset, 1, info.st_size, f);
+                offset += rc;
+        }
+
+        std::vector<uint8_t> my_vector(&data[0], &data[offset]);
+        auto chunkInfo =std::make_tuple(path,my_vector, info.st_size);
+        fclose(f);
+
+        return chunkInfo;
 }
 
 /**
