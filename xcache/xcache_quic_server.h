@@ -10,24 +10,29 @@ extern "C" {
 #include <vector>
 #include <memory>
 #include <string>
+#include <fcntl.h>
 
 #include "xcache_quic.h"
-#include "../xia-api-lib/quicxiasock.hpp"
-#include "../xia-api-lib/xiaapi.hpp"
-
-#define TEST_CHUNK_SIZE 8192
+#include "/root/picoquic/xia-api-lib/quicxiasock.hpp"
+#include "/root/picoquic/xia-api-lib/xiaapi.hpp"
+#include "../contentchunk-lib/chunkapi.h"               //chunk content
+#include "../contentchunk-lib/chunkhash.h"
+#define TEST_CHUNK_SIZE 300
 
 using XcacheQUICPtr = std::unique_ptr<XcacheQUIC>;
 using QUICXIASocketPtr = std::unique_ptr<QUICXIASocket>;
 
-typedef struct {
-    int stream_open;
-    int received_so_far;
-    std::vector<uint8_t> data;
-    size_t datalen;
-    size_t sent_offset;
-    NodePtr xid;
-} callback_context_t;
+struct callback_context_t {
+        int connected;
+        int stream_open;
+        int received_so_far;
+        uint64_t last_interaction_time;
+        std::vector<uint8_t> data;
+        size_t datalen;
+        size_t sent_offset;
+	NodePtr xid;
+	std::vector<std::string> vxid;
+};
 
 class XcacheQUICServer {
     public:

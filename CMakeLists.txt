@@ -199,7 +199,7 @@ target_link_libraries(picoquicclientxia picoquic-core picoquicxia
     ${CMAKE_DL_LIBS}
 )
 include_directories(picoquicclientxia ${XIADIR}/api/include)
-include_directories(picoquicclienttxia ${CONF_INCLUDE_DIRS})
+include_directories(picoquicclientxia ${CONF_INCLUDE_DIRS})
 
 set(XCACHEHDR_LIBRARY ${XIADIR}/api/lib/libxcachehdr.so)
 set(XCACHE_LIBRARY ${XIADIR}/api/lib/libxcache.so)

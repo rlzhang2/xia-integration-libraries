@@ -25,7 +25,7 @@
 #include <cmath>
 
 //#define WORKDIR "/home/testpath"  // default WORKDIR is user's home directory
-#define CONFFILE "local.conf"
+#define CONFFILE "./conf/local.conf"
 #define CHUNKS_DIR "/picoquic/tmpChunks/"
 #define SIGNATURE_BIN "/picoquic/tmpSignatureBin/"
 const uint32_t default_chunk_size = 1024 * 1024;
@@ -299,46 +299,44 @@ std::vector<uint8_t> get_chunkdata(std::string cid,string processType, size_t cS
  * @return tuple  - inlude elements:chunkfile path to retrieve the chunk; chunkdata, and chunk datasize
  *                e.g. use std::get<0>(mytuple) to retrieve chunkfile path from returned mytuple
  * */
+
 std::tuple<string, std::vector<uint8_t>, size_t> load_chunk(std::string cid, std::vector<uint8_t>& data)
 {
-        struct stat info;
-        int rc;
-        std::string homepath = getenv("HOME");
-        #ifdef WORKDIR
-                homepath.assign(WORKDIR);
-        #endif
-        std::string content_dir = homepath + CHUNKS_DIR;
-        std::string path = content_dir + cid;
+	struct stat info;
+	int rc;
+	std::string homepath = getenv("HOME");
+	#ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+     	#endif
+	std::string content_dir = homepath + CHUNKS_DIR;
+	std::string path = content_dir + cid;
 
-        std::vector<uint8_t> tmp;
+	if (stat(path.c_str(), &info) < 0 || info.st_size == 0) {
+		cout << "Failed to located the file: " << cid.c_str() << endl;
+		return {};
+	}
+	cout << "Start fetching data from "<< path.c_str() << " of size " << info.st_size << endl;
 
+	FILE *f = fopen(path.c_str(), "rb");
 
-        if (stat(path.c_str(), &info) < 0 || info.st_size == 0) {
-                cout << "Failed to located the file: " << cid.c_str() << endl;
-        }
-        cout << "Start fetching data from "<< path.c_str() << " of size " << info.st_size << endl;
+	data.reserve(info.st_size);
+	int offset = 0;
 
-        FILE *f = fopen(path.c_str(), "rb");
+	if (!f) {
+		return {};
+	}
 
-        data.reserve(info.st_size);
-        int offset = 0;
+	while (!feof(f)) {
+		unsigned char *p = data.data();
+		rc = fread(p + offset, 1, info.st_size, f);
+		offset += rc;
+	}
 
-        if (!f) {
-                auto chunkInfo =std::make_tuple(path,tmp, 0);
-                return chunkInfo;
-        }
-
-        while (!feof(f)) {
-                unsigned char *p = data.data();
-                rc = fread(p + offset, 1, info.st_size, f);
-                offset += rc;
-        }
-
-        std::vector<uint8_t> my_vector(&data[0], &data[offset]);
-        auto chunkInfo =std::make_tuple(path,my_vector, info.st_size);
-        fclose(f);
-
-        return chunkInfo;
+	std::vector<uint8_t> my_vector(&data[0], &data[offset]);
+	auto chunkInfo =std::make_tuple(path,my_vector, info.st_size);
+	fclose(f);
+	
+	return chunkInfo;
 }
 
 /**
@@ -680,12 +678,11 @@ cid_list_t make_chunks(std::string filename, uint32_t chunk_size)
 	struct stat fs;
 	cid_list_t cids;
 
-	if (stat(filename.c_str(), &fs) != 0) {
-		return cids;
-	}
+if (stat(filename.c_str(), &fs) == 0) { //if file is existing
 
 	FILE *f = fopen(filename.c_str(), "rb");
 	if (f == NULL) {
+		printf( "File could not be opened to retrieve your data from it.\n" );
 		return cids;
 	}
 
@@ -725,8 +722,8 @@ cid_list_t make_chunks(std::string filename, uint32_t chunk_size)
 				cids.emplace_back(cid);
 				}
 			}
-	      }	else {
-			while (!feof(f)) {
+	} else {
+		while (!feof(f)) {
                         if ((byte_count = fread(buf, sizeof(unsigned char), chunk_size, f)) > 0) {
                                 if ((cid = write_chunk(buf, byte_count)) == "") {
                                         fclose(f);
@@ -735,10 +732,14 @@ cid_list_t make_chunks(std::string filename, uint32_t chunk_size)
                                 	}
                                 cids.emplace_back(cid);
                         	}
-			}
-	      }
+		}
+	}
 	free(buf);
 	fclose(f);
+
+	} else {
+		cout<< "Error: Failed to locate content file "<< filename.c_str()<<endl;
+	}
 	return cids;
 }
 
@@ -802,8 +803,7 @@ vector <string> contentChunkIDs(std::string file){
  * Add the cid list to hash table
  * load the initial hashtable and add more items
  **/
-chunkhash_table* initHashtable (const vector<string>& cid_list_t){
-	chunkhash_table* Hashtmp = create_table(TABLE_SIZE);
+chunkhash_table* initHashtable (chunkhash_table* Hashtmp, const vector<string>& cid_list_t){
 	for (int i=0; i<cid_list_t.size(); i++){
 		
 		std::string tmpName = cid_list_t[i];
@@ -823,6 +823,7 @@ chunkhash_table* initHashtable (const vector<string>& cid_list_t){
 		AddItem(Hashtmp, a1, a2);
 
 	}
+	printTable(Hashtmp);
 	return Hashtmp;
 
 }

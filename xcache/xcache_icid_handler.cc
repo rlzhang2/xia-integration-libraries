@@ -75,11 +75,14 @@ int XcacheICIDHandler::handleICIDRequest()
     Node cid(XID_TYPE_CID, icid.id_string());
     std::string cid_str = cid.to_string();
 
+    cout<<"XcacheICIDHandler: src dag from requestor " << src_dag.dag_string() << endl;
+    cout<<"Check XcacheICIDHandler: dst dag " << dst_dag.dag_string() << endl;
+
     // Check if the CID is local. If yes, queue job to push it to caller
     // TODO: Create new QUIC conenciton to src_dag and send chunk
     /*
     printf("ICIDMonitor: checking to see if CID is local\n");
-    if(ctrl->is_CID_local(cid_str) == true) {
+    if(ctrl->is_CID_local(cid_str) == true) { 
         // Schedule a job to have the chunk pushed to caller
         printf("ICIDMonitor: queuing a push of found CID\n");
         ICIDWorkRequestPtr work(
@@ -88,7 +91,7 @@ int XcacheICIDHandler::handleICIDRequest()
         pool->queue_work(std::move(work));
         return;
     }
-    */
+   */
     cout << "XcacheICIDHandler: CID was not local" << endl;
     // If not,
     // We need to fetch only if the chunk is not already in IRQ table

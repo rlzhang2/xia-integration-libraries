@@ -35,6 +35,6 @@ std::vector<uint8_t> get_chunkdata(std::string cid, std::string processType,  si
 std::tuple<string, std::vector<uint8_t>, size_t> load_chunk(std::string cid, std::vector<uint8_t>& data);
 std::pair<string, uint8_t*> get_chunkhash(std::string cid, std::vector<uint8_t>& data);
 map<std::string, chunkMeta> get_mapOfchunks (std::string path);
-chunkhash_table* initHashtable (const vector<string>& cid_list_t);
+chunkhash_table* initHashtable (chunkhash_table* Hashtmp, const vector<string>& cid_list_t);
 
 #endif // _chunkapi_h

@@ -11,6 +11,7 @@
 #include <vector>
 #include <queue>
 #include <string>
+#include <sys/stat.h>
 
 // C includes
 #include <string.h> // memset
@@ -33,6 +34,7 @@ extern "C" {
 #define THEIR_ADDR "THEIR_ADDR"
 #define TICKET_STORE "TICKET_STORE"
 #define TEST_CID "TEST_CID"
+#define CHUNKS_RECV_DIR "CHUNKS_RECV_DIR"
 
 using namespace std;
 
@@ -46,13 +48,13 @@ struct chunk {
 	unique_ptr<uint8_t> data;
 };
 
-// If there were multiple streams, we would track progress for them here
-struct callback_context_t {
-	int connected;
-	int stream_open;
-	int received_so_far = 0;
-	uint64_t last_interaction_time;
+struct xcache_callback_context_t {
+        int connected;
+        int stream_open;
+        int received_so_far;
+        uint64_t last_interaction_time;
 	unique_ptr<struct chunk> chunk;
+	vector<string> xid; //add xid to set when requesting a xid fetch
 };
 
 int trim_buffer(vector<uint8_t>& buf, int len)
@@ -64,14 +66,68 @@ int trim_buffer(vector<uint8_t>& buf, int len)
 	return 0;
 }
 
-int process_data(struct callback_context_t* context)
+//ClientEnd store content after fetching back chunk data from Xcache QuicServer 
+int store_xidchunk(struct xcache_callback_context_t* context, std::string fp, uint8_t* bytes, size_t length, bool isValid){
+	int retVal =0;
+        std::string path;
+	FILE *f_store;
+	if (isValid){
+		char* contextstr = reinterpret_cast<char*> (context->chunk->data.get());
+                string datacontextstr(contextstr, context->chunk->chdr->content_len());
+                auto chdr_context = make_unique<CIDHeader>(datacontextstr, 0);
+
+		//Store Content using ContentHeader which be same as CID requested
+                string serialized_cheader = chdr_context->serialize();
+                cout << "content Header  : " << chdr_context->id() << endl;
+
+                //create path if not existing
+		if (mkdir(fp.c_str(), 0777) < 0 && errno != EEXIST) {
+			std::cout <<"ERROR: create the chunk received filepath "<< endl;
+                        return -1;
+               	}
+        	path = fp + chdr_context->id();
+	       	f_store = fopen(path.c_str(), "rb");
+               	if (f_store == NULL) { //xid path not existing
+			f_store = fopen(path.c_str(), "wb");
+                        	if (f_store == NULL) {
+                                        std::cout << "Can't open file to write chunk data "<< std::endl;
+					return -1;
+                                 }
+				fwrite(bytes, 1, length, f_store);
+				fclose(f_store);
+				cout << "Content Chunk has been stored successfully under  "<< path.c_str() << endl;
+		} else{
+                	printf("content already in storage!!\n");
+                	}
+        return 0;
+	} else {
+		cout<<"ERROR: invalid Data received!!!"<<endl;
+		retVal= -1;
+	}	
+	return retVal;
+}
+
+int process_data(struct xcache_callback_context_t* context, uint8_t* bytes, size_t length)
 {
+	//Client use the content cid to fetch to validate chunk received, and path to store chunks
+	auto conf = LocalConfig(CONFFILE);
+        auto test_cid = conf.get(TEST_CID);
+
+	std::string tmp_fs;
+        std::string homepath = getenv("HOME");
+        #ifdef WORKDIR
+        	homepath.assign(WORKDIR);
+        #endif
+        tmp_fs = homepath + conf.get(CHUNKS_RECV_DIR);
+
 	auto buf = &(context->chunk->buf);
 	int hdr_len = -1;
 	size_t data_len = -1;
 	uint32_t* dataptr;
 	char* datastrptr;
 	unique_ptr<string> d;
+	bool isValid(true);
+	std::string s_tmpHeader;
 	cout << __FUNCTION__ << " Processing data of size: "
 		<< context->chunk->buf.size() << endl;
 
@@ -84,9 +140,8 @@ int process_data(struct callback_context_t* context)
 				}
 				// Get header length and switch to FETCHING_HEADER state
 				dataptr = reinterpret_cast<uint32_t*>(buf->data());
-				cout << __FUNCTION__ << " hdr len (NBO): " << *dataptr << endl;
 				context->chunk->hdr_len = ntohl(*dataptr);
-				cout << "Got header len: " << context->chunk->hdr_len << endl;
+				//cout << "Got header len: " << context->chunk->hdr_len << endl;
 				buf->erase(buf->begin(), buf->begin() + sizeof(uint32_t));
 				context->chunk->state = ChunkState::FETCHING_HEADER;
 				break;
@@ -101,13 +156,19 @@ int process_data(struct callback_context_t* context)
 				datastrptr = reinterpret_cast<char*>(buf->data());
 				d.reset(new string(datastrptr, hdr_len));
 				context->chunk->chdr.reset(new CIDHeader(*d));
+				s_tmpHeader = context->chunk->chdr->id();
+				//cout << "Check CIDHeader calcualted from received data: " << s_tmpHeader.c_str() << endl;
+
+				//compare CIDHeader calcuated with the CID requested
+				if(strcmp(test_cid.c_str(),s_tmpHeader.c_str()) != 0){
+					isValid=false;
+				}
 				buf->erase(buf->begin(), buf->begin() + hdr_len);
 				context->chunk->state = ChunkState::FETCHING_DATA;
 				break;
 			case ChunkState::FETCHING_DATA:
 				cout << __FUNCTION__ << " state FETCHING_DATA" << endl;
 				data_len = context->chunk->chdr->content_len();
-				cout << __FUNCTION__ << " buf size: " << buf->size() << endl;
 				if(buf->size() < data_len) {
 					return 0;
 				}
@@ -115,6 +176,10 @@ int process_data(struct callback_context_t* context)
 				cout << "Got data" << endl;
 				context->chunk->data.reset(new uint8_t[data_len]);
 				memcpy(context->chunk->data.get(), buf->data(), data_len);
+                                //printf("Received chunkdata from xCacheServer: %lu  %s\n",data_len,  context->chunk->data.get());
+
+				//Store chunks
+				store_xidchunk(context,tmp_fs, bytes, length,  isValid); 
 				buf->erase(buf->begin(), buf->begin() + data_len);
 				context->chunk->state = ChunkState::READY;
 				break;
@@ -127,7 +192,7 @@ int process_data(struct callback_context_t* context)
 }
 
 
-int receive_data(struct callback_context_t* context,
+int receive_data(struct xcache_callback_context_t* context,
 		uint8_t* bytes, size_t length) {
 
 	cout << __FUNCTION__ << " Got " << length << " bytes" << endl;
@@ -141,12 +206,11 @@ int receive_data(struct callback_context_t* context,
 	auto buf = &(context->chunk->buf);
 	buf->insert(buf->begin(), bytes, bytes + length);
 	context->received_so_far += length;
-	cout << __FUNCTION__ << " Processing buf size: " << buf->size() << endl;
 }
 
 // End a stream on the given connection
 int end_stream(picoquic_cnx_t* cnx, uint64_t stream_id,
-		struct callback_context_t* context)
+		struct xcache_callback_context_t* context)
 {
 	picoquic_reset_stream(cnx, stream_id, 0);
 	context->stream_open = 0;
@@ -157,14 +221,10 @@ int client_callback(picoquic_cnx_t* cnx,
 		uint64_t stream_id, uint8_t*bytes, size_t length,
 		picoquic_call_back_event_t event, void *callback_context)
 {
-	cout << __FUNCTION__ << " stream: " << stream_id
-		<< " datalen: " << length << endl;
-	std::string data("Hello World!");
-	time_t ttl = 0;
-	unique_ptr<ContentHeader> chdr = make_unique<CIDHeader>(data, ttl);
+//	cout << __FUNCTION__ << " stream: " << stream_id << " datalen: " << length << endl;
 
-	struct callback_context_t *context =
-		(struct callback_context_t*)callback_context;
+	struct xcache_callback_context_t *context =
+		(struct xcache_callback_context_t*)callback_context;
 
 	context->last_interaction_time = picoquic_current_time();
 
@@ -197,17 +257,17 @@ int client_callback(picoquic_cnx_t* cnx,
 			context->stream_open = 0;
 			return 0;
 		case picoquic_callback_stream_data:
-			cout << "Callback: stream data" << endl;
+			cout << "Xcache Client Callback: stream data" << endl;
 			if(length > 0) {
 				receive_data(context, bytes, length);
-				process_data(context);
+				process_data(context, bytes, length);
 			}
 			break;
 		case picoquic_callback_stream_fin:
-			cout << "Callback: stream finished" << endl;
+			cout << "Xcache Client Callback: stream finished" << endl;
 			if(length > 0) {
 				receive_data(context, bytes, length);
-				process_data(context);
+				process_data(context, bytes, length);
 			}
 			context->stream_open = 0;
 			cout << "Reception done after " << context->received_so_far
@@ -229,17 +289,21 @@ int client_callback(picoquic_cnx_t* cnx,
 }
 
 void start_stream(picoquic_cnx_t* connection,
-		struct callback_context_t* context)
+		struct xcache_callback_context_t* context, string xid)
 {
 	cout << "Starting a stream" << endl;
 
 	uint64_t stream_id = 0;
-	char data[] = "Hello world!";
 	context->stream_open = 1;
 	context->connected = 1;
 
+	//char data[] = "TEST from start_stream Hello world!";
+	//sent a GET CID request
+	char data[xid.length()];
+        strcpy(data, xid.c_str());
+	context->xid.push_back(xid.c_str()); //add requested cid to context	
 	// Queue up a "Hello world!" to be sent to the server
-	cout << "Sending " << sizeof(data) << " bytes on stream" << endl;
+	//printf("Sending %ld bytes  CID string %s on stream \n",  sizeof(data), data);
 	if(picoquic_add_to_stream(connection,
 				stream_id, // Any arbitrary stream ID client picks
 				(uint8_t*)data, sizeof(data), // data to be sent
@@ -286,9 +350,10 @@ int main()
 	// QUIC client
 	picoquic_quic_t *client;
 
+	 std::cout << "Check Start callback context"<<server_addr.c_str()<<endl;
 	// Callback context
-	struct callback_context_t callback_context;
-	memset(&callback_context, 0, sizeof(struct callback_context_t));
+	struct xcache_callback_context_t callback_context;
+	memset(&callback_context, 0, sizeof(struct xcache_callback_context_t));
 
 	// Server address
 	sockaddr_x server_address;
@@ -389,7 +454,7 @@ int main()
 
 	// If 0RTT is available, start a stream
 	if(picoquic_is_0rtt_available(connection)) {
-		start_stream(connection, &callback_context);
+		start_stream(connection, &callback_context, test_cid);
 		zero_rtt_available = 1;
 	}
 	cout << "Zero RTT available: " << zero_rtt_available << endl;
@@ -467,7 +532,7 @@ int main()
 							<< endl;
 					if(!zero_rtt_available) {
 						cout << "0rtt unavailable, starting stream" << endl;
-						start_stream(connection, &callback_context);
+						start_stream(connection, &callback_context,test_cid);
 					}
 					established = 1;
 				}
