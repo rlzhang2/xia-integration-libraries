@@ -1,4 +1,5 @@
 #include "../xia-api-lib/xiaapi.hpp"
+#define CONFFILE "./conf/local.conf"
 
 #include <stdio.h>
 #include <assert.h>
@@ -21,7 +22,8 @@
 
 #include "headers/ncid_header.h"
 //#define WORKDIR "/home/testpath"  //default is user's home directory
-#define CHUNKS_RECV_DIR "/picoquic/tmpChunks_recv/"
+#define CHUNKS_RECV_DIR "CHUNKS_RECV_DIR"
+//#define CHUNKS_RECV_DIR "/picoquic/tmpChunks_recv/"
 
 using namespace std;
 
@@ -112,7 +114,9 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
                 #ifdef WORKDIR
                         homepath.assign(WORKDIR);
                 #endif
-                std::string tmp_fs = homepath + CHUNKS_RECV_DIR;
+		auto conf = LocalConfig(CONFFILE);
+        	std::string recv_dir = conf.get(CHUNKS_RECV_DIR);
+                std::string tmp_fs = homepath + recv_dir;
                 size_t found;
                 int type_offset=0;
 		int sign_offset=  (xid_requested.find("NCID:") != string::npos) ? 128 : 0; //NCID:RSA signature size due to 1024 bit RSA key used

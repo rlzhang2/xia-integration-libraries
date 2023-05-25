@@ -52,10 +52,14 @@ int cnx_handler (struct addr_info_t &test_from_addr,
         std::string tmpContent_f = homepath  + confile.get(CONTENT_STORE);
 	vector <string> xid_lst;
         xid_lst = contentChunkIDs(tmpContent_f);
-
-	for (int i=0; i<xid_lst.size(); i++){
-                        std::cout<<"XID: "<< xid_lst[i].c_str()<<endl;
+	
+	if (xid_lst.size()==0) {
+		std::cout<<"No chunk files are created. Please check if content file exists."<<endl;
 	}
+	else {
+		for (int i=0; i<xid_lst.size(); i++){
+                        std::cout<<"XID: "<< xid_lst[i].c_str()<<endl;
+		}
 
 	picoquic_quic_t *quic_client;
 
@@ -102,7 +106,7 @@ int cnx_handler (struct addr_info_t &test_from_addr,
 
 	get_chunk_data (test_from_addr, test_to_addr, xid_lst, quic_client, callback_context,
                                        state, current_time, proc_type, conf);
-
+	
         client_done:
                  switch(state) {
                     case 3:
@@ -115,7 +119,8 @@ int cnx_handler (struct addr_info_t &test_from_addr,
 
 
         retval=0;
-        return retval;
+	}
+   return retval;
 }
 
 int main()

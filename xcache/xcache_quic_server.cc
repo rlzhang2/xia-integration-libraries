@@ -2,27 +2,16 @@
 #include "xcache_quic_server.h"
 
 #include "cid_header.h"
-
 #include <functional> // std::bind
 #include <iostream>
-
-
+#include <fstream>
+#include <tuple>
 using namespace std;
 
 XcacheQUICServer::XcacheQUICServer(const string& xcache_aid)
     : quic(&XcacheQUICServer::server_callback) {
-	    //TESTING ON CHUNKHASH FROM QUIC SERVER  -PASS *******
-	    std::cout<<"RZ check QuicServer Constructor!!!!!!!!"<<std::endl;
-/*	    std::string tmp_f;
-	    tmp_f  = getenv("HOME") + "/picoquic/tmpContents/mytestcontent2.txt";
-	    cout << "tesing chunk file "<< tmp_f.c_str() << endl;
-	    cid_list_t chunks = chunk_file(tmp_f, TEST_CHUNK_SIZE, 0);
-            print_chunklst(chunks);
-	    chunkhash_table* mytest=initHashtable(chunks);
-	    printTable(mytest);
-	    */
-//END OF TESTING 
     xcache_socket = make_unique<QUICXIASocket>(xcache_aid);
+    xcache_cidHash=create_table(TABLE_SIZE);
 }
 
 void XcacheQUICServer::updateTime() {
@@ -30,12 +19,24 @@ void XcacheQUICServer::updateTime() {
 }
 
 int XcacheQUICServer::fd() {
-	cout<<"Xcache socket created :" << xcache_socket->fd()<<endl;
-    	return xcache_socket->fd();
+    return xcache_socket->fd();
+}
+
+string  XcacheQUICServer::getCID() {
+
+	int ret;
+	string sCID_to_request;
+    	ret = picoquic_xia_recvfrom(xcache_socket->fd(), &addr_from, &addr_local,
+            buffer, sizeof(buffer));
+        Graph our_addr(&addr_local);
+	sCID_to_request = our_addr.intent_CID_str();
+
+    return sCID_to_request;
 }
 
 GraphPtr XcacheQUICServer::serveCID(const string& cid) {
-    	return xcache_socket->serveCID(cid);
+
+    return xcache_socket->serveCID(cid);
 }
 
 int64_t XcacheQUICServer::nextWakeDelay(int64_t delay_max) {
@@ -45,17 +46,23 @@ int64_t XcacheQUICServer::nextWakeDelay(int64_t delay_max) {
 int XcacheQUICServer::sendInterest(sockaddr_x& icid_dag) {
     sockaddr_x our_addr;
     xcache_socket->fillAddress(our_addr);
-
-    //check the address we passed in sending request
-    Graph destDag(&icid_dag);
-    Graph srcDag(&our_addr);
-    cout <<"ICID sent dest Addr: " << destDag.dag_string() << "  From src Addr: "<< srcDag.dag_string()<<endl;
     return picoquic_xia_icid_request(fd(), &icid_dag, &our_addr);
+}
+
+void XcacheQUICServer::upthashtable(vector <string> xidLst){
+        initHashtable(gethashtable(), xidLst);
+}
+
+chunkhash_table*  XcacheQUICServer::gethashtable(){
+        if (xcache_cidHash->count > 0) {
+                //printTable(xcache_cidHash);
+                cout<<"check xcache hashtable size: "<<xcache_cidHash->count <<endl;
+        }
+        return xcache_cidHash;
 }
 
 // There's a packet on our socket for us to process, after select()
 int XcacheQUICServer::incomingPacket() {
-    std::cout<<"Check getting in QuicServer CID incomingPacket"<<std::endl;
     bytes_recv = picoquic_xia_recvfrom(fd(), &addr_from, &addr_local,
             buffer, sizeof(buffer));
     if(bytes_recv <= 0) {
@@ -64,11 +71,11 @@ int XcacheQUICServer::incomingPacket() {
     quic.updateTime();
 
     if(bytes_recv > 0) {
-        cout << "Server got " << bytes_recv << " bytes from client" << endl;
+        cout << "step1. Server got " << bytes_recv << " bytes from client" << endl;
         Graph sender_addr(&addr_from);
         Graph our_addr(&addr_local);
-        cout << "Sender fromAddr: " << sender_addr.dag_string() << endl;
-        cout << "Us toAddr: " << our_addr.dag_string() << endl;
+        cout << "Sender: " << sender_addr.dag_string() << endl;
+        cout << "Us: " << our_addr.dag_string() << endl;
         quic.incomingPacket(buffer,
                 (size_t) bytes_recv, (struct sockaddr*) &addr_from,
                 (struct sockaddr*) &addr_local, to_interface,
@@ -83,10 +90,10 @@ int XcacheQUICServer::incomingPacket() {
             }
             auto ctx = new callback_context_t();
             ctx->xid.reset(new Node(our_addr.intent_CID_str()));
-	    std::string sXIDtoget = our_addr.intent_CID_str();
-	    //ctx->xid.push_back(our_addr.intent_CID_str());
-	     cout <<"Check CID requested to fetch from xcacheclient "<< sXIDtoget.c_str() <<" build Route:"<<endl;
-            //GraphPtr dummy_cid_addr = serveCID(sXIDtoget);
+	    //Check the requested XID is set with new quic context
+	    Node cidNode_tmp = our_addr.intent_CID_str();
+	    cout<<"step2. Server captures CID requested from Get "<< cidNode_tmp.to_string().c_str()<<endl;
+	    
             picoquic_set_callback(newest_cnx, server_callback, ctx);
             cout << "Server: Connection state = "
                 << picoquic_get_cnx_state(newest_cnx) << endl;
@@ -117,11 +124,13 @@ int XcacheQUICServer::incomingPacket() {
         // TODO: HACK!!! peer and local addr pointers sent as
         // sockaddr_storage so underlying code won't complain.
         // Fix would require changes to picoquic which we want to avoid
+	std::cout<<"Check QuicServer Preparing Packet to send out"<<std::endl;
         int rc = picoquic_prepare_packet(next_connection,
                 quic.currentTime(),
                 send_buffer, sizeof(send_buffer), &send_length,
                 (struct sockaddr_storage*) &addr_from, &peer_addr_len,
                 (struct sockaddr_storage*) &addr_local, &local_addr_len);
+	cout<<"RZ Check send_length: "<<sizeof(send_buffer)<<endl;
         if(rc == PICOQUIC_ERROR_DISCONNECTED) {
             // Connections list is empty, if this was the last connection
             if(next_connection == newest_cnx) {
@@ -134,10 +143,14 @@ int XcacheQUICServer::incomingPacket() {
         }
         if(rc == 0) {
             if(send_length > 0) {
-                printf("Server: sending %ld byte packet\n", send_length);
-                (void)picoquic_xia_sendmsg(fd(),
-                        send_buffer, send_length,
+		//send content data if available locally
+		std::vector<uint8_t> contentData;
+        	contentData=get_chunkdata(getCID().c_str(),"GET", send_length);
+
+    		 (void)picoquic_xia_sendmsg(fd(),
+                        reinterpret_cast<uint8_t *>(contentData.data()), contentData.size(),
                         &addr_from, &addr_local);
+		 printf("Server: sending %ld byte packet\n", contentData.size());
             }
         } else {
             printf("Server: Exiting outgoing pkts loop. rc=%d\n", rc);
@@ -163,35 +176,39 @@ void XcacheQUICServer::print_address(struct sockaddr* address, char* label)
 
 int XcacheQUICServer::buildDataToSend(callback_context_t* ctx, size_t datalen)
 {
-    ctx->data.reserve(datalen);
-    for(int i=0; i<datalen; i++) {
-        ctx->data.push_back(i % 256);
-    }
+    //First we retrieve the CID from getRequest
+    Node cidNode_req = * ctx->xid;
+    cout<<"Check CID string requested from Get "<< cidNode_req.to_string().c_str()<<endl;
+    //ctx->data.reserve(datalen);
+    //TODO: If the datalen is greater than TEST_CHUNK_SIZE, handle errormsg
+    std::vector<uint8_t> tmpChunkData;
+     std::string procType("GET");
+    tmpChunkData = get_chunkdata(cidNode_req.to_string().c_str(), procType, datalen);
+
+    copy(tmpChunkData.begin(), tmpChunkData.end(), back_inserter(ctx->data));
+    printf("Sending %ld bytes of data on stream\n", ctx->data.size() );
+
     return 0;
 }
 
-// Send a chunk to client if available in xcache fs
+// Send a chunk
 int XcacheQUICServer::sendData(picoquic_cnx_t* connection,
                 uint64_t stream_id, callback_context_t* ctx)
 {
-    int rc;
+    cout <<"step5. "<< __FUNCTION__ << ": Create Data to send to Client "  << endl;
     if (!ctx) {
         return -1;
     }
+
     // Fill in random data as chunk contents
     if (ctx->data.size() == 0) {
-        if (buildDataToSend(ctx, TEST_CHUNK_SIZE) ) {
-            cout << "ERROR creating data buffer to send" << endl;
+        if (buildDataToSend(ctx, TEST_CHUNK_SIZE)) {
+            cout << "ERROR: failed to retrieve data to send" << endl;
             return -1;
         }
-        ctx->datalen = TEST_CHUNK_SIZE;
+        ctx->datalen = ctx->data.size();
         ctx->sent_offset = 0;
-    } else {
-	    //found the chunk
-	    ctx->datalen = ctx->data.size();
-	    cout << "Sent chunk data of size: " << ctx->datalen << endl;
     }
-
 
     if(ctx->sent_offset != 0) {
         return 0;
@@ -204,8 +221,6 @@ int XcacheQUICServer::sendData(picoquic_cnx_t* connection,
     auto chdr = make_unique<CIDHeader>(datastr, 0);
     cout << __FUNCTION__ << " Content size: " << chdr->content_len() << endl;
     string serialized_header = chdr->serialize();
-     //Content Header calculated from content data should match CID-to-fetch
-    cout << "CHECK content Header CID : " << chdr->id() << endl;
 
     // Send the header size
     uint32_t header_len_nbo = htonl(serialized_header.size());
@@ -224,18 +239,17 @@ int XcacheQUICServer::sendData(picoquic_cnx_t* connection,
         cout << __FUNCTION__ << " ERROR: sending header" << endl;
         return -1;
     }
-    cout << "Sent header: " << serialized_header.c_str() << endl;
+    cout << "Sent header of size: " << serialized_header.size() << endl;
 
     // Send the data
     if (picoquic_add_to_stream(connection, stream_id,
             ctx->data.data(), ctx->datalen, 1)) {
         cout << "ERROR: queuing data to send" << endl;
         return -1;
-    }
-    cout << "Sent data of size: " << ctx->datalen << endl;
+    } 
+    cout << "Send Data Size: " << ctx->datalen <<endl;
     ctx->sent_offset = ctx->datalen;
     return ctx->datalen;
-    
 }
 
 int XcacheQUICServer::remove_context(picoquic_cnx_t* connection,
@@ -248,7 +262,7 @@ int XcacheQUICServer::remove_context(picoquic_cnx_t* connection,
     return 0;
 }
 
-// Handle data sent from client host
+// Handle data from client
 int XcacheQUICServer::process_data(callback_context_t* context,
         uint8_t* bytes, size_t length)
 {
@@ -261,19 +275,13 @@ int XcacheQUICServer::process_data(callback_context_t* context,
     // No data to process
     if(length <= 0) {
         return 0;
-    } else {
-    // Now We get to read CID data from client
-    string data((const char*)bytes, length);
-    context->received_so_far += length;
-    
-    std::vector<uint8_t> rawf_chunk;
-    cout << "Check locating content data by the requested CID: "<<data.c_str()<< endl;
-    std::tuple<string, std::vector<uint8_t>, size_t> result = load_chunk(data.c_str(), rawf_chunk);
-    cout << "located the content chunk file path: "<< get<0>(result) << " Size: " <<get<2>(result)<<endl;
-    context->data =get<1>(result);
-
-    return length;
     }
+
+    // Client simply sends a hello message as a placeholder
+    string data((const char*)bytes, length);
+    cout <<"step4. "<< __FUNCTION__ << ": Client sent " << data.c_str() << endl;
+    context->received_so_far += length;
+    return length;
 }
 
 
@@ -281,16 +289,15 @@ int XcacheQUICServer::server_callback(picoquic_cnx_t* connection,
         uint64_t stream_id, uint8_t* bytes, size_t length,
         picoquic_call_back_event_t event, void* ctx)
 {
-    cout<<__FUNCTION__ <<"Stream: " << stream_id<< " len: " << length<< " event: " << event << endl;
+   
+    cout <<"step3. " << __FUNCTION__ <<": stream: " << stream_id
+         << " len: " << length
+         << " event: " << event << endl;
     callback_context_t* context = (callback_context_t*)ctx;
     if(!context) {
         cout << __FUNCTION__ << " called without context." << endl;
         return -1;
     }
-
-    //test to see the data we received from client on ctx
-     //string data((const char*)bytes, length);
-     //cout << __FUNCTION__ << " CHECK CID see if content available " << data.c_str() << endl;
 
     switch(event) {
         case picoquic_callback_ready:
@@ -344,6 +351,8 @@ int XcacheQUICServer::server_callback(picoquic_cnx_t* connection,
             }
             process_data(context, bytes, length);
             sendData(connection, stream_id, context);
+
+     	   // getCIDcontent("test",connection);
             cout << "ServerCallback: StreamFin" << endl;
             cout << "ServerCallback: got " << context->received_so_far
                 << " bytes from client before ending" << endl;

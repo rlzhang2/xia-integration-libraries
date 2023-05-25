@@ -27,7 +27,8 @@ extern "C" {
 // The protobuf defs to configure forwarding table on router
 #include "configrequest.pb.h"
 
-+#define CONFFILE "./conf/local.conf"
+#define CONFFILE "./conf/local.conf"
+
 // Let's hard code the router's address for now
 #define OUR_ADDR "OUR_ADDR"
 #define ROUTER_ADDR "ROUTER_ADDR"
@@ -103,7 +104,7 @@ int picoquic_xia_socket()
                 sa = NULL;
                 continue;
             }
-            printf("Step3a). Call xiaapi to open socket Iface: %s Address: %s\n", ifa->ifa_name,
+            printf("Iface: %s Address: %s\n", ifa->ifa_name,
                     inet_ntoa(sa->sin_addr));
             break;
         }
@@ -180,7 +181,9 @@ static int _send_server_cmd(std::string cmd)
     memcpy(&strsize, dummy, sizeof(int));
     strsize = ntohl(strsize);
     std::cout << "Router returned string of size: " << strsize << std::endl;
+    printf("Router said: %s size: %d\n", &dummy[4], retval);
 
+    std::cout << "Sending route cmd of size: " << buffer_offset << std::endl;
     retval = send(rsockfd, buffer, buffer_offset, 0);
     if (retval != buffer_offset) {
         std::cout << "ERROR: sending routing info to router" << std::endl;
@@ -289,10 +292,9 @@ void xidToLocalDAG (const char* xid, GraphPtr& addr)
     // Our XIA address, to be used for sending packets out
     auto conf = LocalConfig(CONFFILE);
     auto our_addr = conf.get(OUR_ADDR);
-    std::cout<<"Step3a) Check our addr in xiaapi from config "<< conf.get_our_addr() <<std::endl;
     std::string xidstr(xid);
     std::string xiaaddrstr = our_addr +  " " + xidstr;
-    std::cout << "Step3a) Check our address used to send packets out from xiaapi: " << xiaaddrstr << std::endl;
+    std::cout <<  __FUNCTION__<<" Our address: " << xiaaddrstr << std::endl;
     addr.reset(new Graph(xiaaddrstr));
 }
 
@@ -400,30 +402,27 @@ auto buildRouteCommandForCID(const char* cid,
         const struct sockaddr_in& bound_addr,
         LocalConfig &conf) -> std::string
 {
-    std::string xidtype =  strstr(cid, "NCID:") != NULL ? "NCID" : "CID" ;
+    std::string xidtype("CID");
     return buildRouteCommandForXID(xidtype, cid, bound_addr, conf);
 }
 
 auto buildRouteCommandForCID(const char* cid,
         const struct sockaddr_in& bound_addr) -> std::string
 {
-   //separate xidtype cid and ncid from the xid string passed in
-    std::string xidtype =  strstr(cid, "NCID:") != NULL ? "NCID" : "CID" ;
-    //std::cout<< "Build XID type " << xidtype << std::endl;
+    std::string xidtype("CID");
     return buildRouteCommandForXID(xidtype, cid, bound_addr);
 }
 
 auto buildRouteRemoveCommandForCID(const char* cid,
     LocalConfig &conf) -> std::string
 {
-    std::string xidtype =  strstr(cid, "NCID:") != NULL ? "NCID" : "CID" ;
+    std::string xidtype("CID");
     return buildRouteRemoveCommandForXID(xidtype, cid, conf);
 }
 
 auto buildRouteRemoveCommandForCID(const char* cid) -> std::string
 {
-    //separate xidtype cid from ncid
-    std::string xidtype =  strstr(cid, "NCID:") != NULL ? "NCID" : "CID" ;
+    std::string xidtype("CID");
     return buildRouteRemoveCommandForXID(xidtype, cid);
 }
 
@@ -468,7 +467,6 @@ int picoquic_xia_serve_cid(int xcachesockfd, const char* cid,
     cidToLocalDAG(cid, cid_addr, conf);
 
     // Build a bin/xroute command to be sent to router
-    std::cout << "Build route for AID " << std::endl;
     std::string cmd = buildRouteCommandForCID(cid, *xcache_ip_addr, conf);
 
     if(_send_server_cmd(cmd, conf)) {
@@ -487,7 +485,6 @@ int picoquic_xia_serve_cid(int xcachesockfd, const char* cid,
         return -1;
     }
 
-     std::cout << "Check TYPE we calculated " << cid << std::endl;
     // Fill cid_addr with our local DAG for given CID
     cidToLocalDAG(cid, cid_addr);
 
@@ -562,7 +559,6 @@ int picoquic_xia_open_server_socket(const char* aid, GraphPtr& my_addr)
     }
 
     // Fill my_addr with our local DAG corresponding to given aid
-    std::cout << "Open a quicServer socket with the xCacheAID from xiaapi "<< aid << std::endl;
     aidToLocalDAG(aid, my_addr);
 
     // Build a bin/xroute command to be sent to router
@@ -586,7 +582,6 @@ int picoquic_xia_open_server_socket(const char* aid, GraphPtr& my_addr,
 {
     // Open a socket and bind to a random local port
     int sockfd = picoquic_xia_socket(ifname);
-    std::cout << "Check open a socket bound to a random port " << sockfd << std::endl;
     if(sockfd == -1) {
         std::cout << "ERROR creating bound socket" << std::endl;
         return -1;
@@ -774,8 +769,11 @@ int picoquic_xia_router_addr(struct sockaddr_in* router_addr)
         std::cout << "Error converting router addr" << std::endl;
         return -1;
     }
-    //printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
-            //ntohs(router_addr->sin_port));
+
+    //check convert host addr to internet dot notation
+    std::cout<<"CHECK ROUTER_ADDR: "<<raddr.c_str() <<" port "<<rport<<std::endl;
+    printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
+            ntohs(router_addr->sin_port));
     return 0;
 }
 
@@ -796,8 +794,9 @@ int picoquic_xia_router_addr(struct sockaddr_in* router_addr, LocalConfig &conf)
         std::cout << "Error converting router addr" << std::endl;
         return -1;
     }
-    //printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
-            //ntohs(router_addr->sin_port));
+     std::cout<<"CHECK ROUTER_ADDR from confile file "<<raddr.c_str() <<" port "<<rport<<std::endl;
+    printf("Router addr: %s:%d\n", inet_ntoa(router_addr->sin_addr),
+            ntohs(router_addr->sin_port));
     return 0;
 }
 
@@ -842,6 +841,12 @@ int picoquic_xia_router_control_addr(struct sockaddr_in* router_addr,
 int picoquic_xia_recvfrom(int sockfd, sockaddr_x* addr_from,
         sockaddr_x* addr_local, uint8_t* buffer, int buflen)
 {
+
+    /* Graph addrfr(addr_from);
+    Graph addrlocal(addr_local);
+    std::cout<<"addr_fr "<<addrfr.dag_string()<<std::endl;
+    std::cout<<"addr_local "<<addrlocal.dag_string()<<std::endl;
+    */
     // Receive the packet
     struct sockaddr_in router_addr;
     struct msghdr msg;
@@ -892,9 +897,6 @@ int picoquic_xia_recvfrom(int sockfd, sockaddr_x* addr_from,
     // Copy out the payload to user buffer
     int payload_offset = sizeof(node_t) * (xiah.dnode + xiah.snode);
     memcpy(buffer, &(addrspluspayload[payload_offset]), payload_length);
-    std::cout<<"Check payload received from Sender: "<<their_addr.dag_string() <<std::endl;
-    std::cout<<"Check to Us Addr:" <<our_addr.dag_string()<<std::endl;
-    std::cout<<"Check payload length: "<<payload_length<<std::endl;
     return payload_length;
 }
 

@@ -254,6 +254,19 @@ include_directories(picoquicclientxiapush ${XIADIR}/api/include)
 include_directories(picoquicclientxiapush ${CONF_INCLUDE_DIRS})
 
 find_package( Threads )
+add_executable(xcache_picoquicclientget put-get-communication/xcache_picoquicclientget.cpp)
+target_link_libraries(xcache_picoquicclientget picoquic-chunk picoquic-core picoquicxia
+    localconfig
+    ${PTLS_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
+    ${PROTOBUF_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${CMAKE_DL_LIBS}
+)
+include_directories(xcache_picoquicclientget ${XIADIR}/api/include)
+include_directories(xcache_picoquicclientget ${CONF_INCLUDE_DIRS})
+
+find_package( Threads )
 add_executable(picoquicserverxiapush put-get-communication/picoquicserverxiapush.cpp)
 target_link_libraries(picoquicserverxiapush picoquic-chunk picoquic-core picoquicxia
     localconfig

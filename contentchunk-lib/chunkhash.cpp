@@ -140,6 +140,7 @@ void AddItem(chunkhash_table* table, char* cname, char* cpath)
 		table->items[index]= item;
 		std::cout << cname << " has been added in hash table successfully!" <<endl;
 		table->count++;
+		std::cout <<" table item count: "<<table->count<<endl;
 		if(pthread_mutex_unlock(&table->mtxlock)<0){
 			std::cout<<" failed to unlock after updating!"<<endl;
 		}else{
@@ -219,14 +220,16 @@ char* LookupChunk(chunkhash_table* table, char* cname)
  * @param cname - chunkitemKey eg CID
  * @return VOID
  **/
-void print_lookup(chunkhash_table* table, char* cname) {
+int print_lookup(chunkhash_table* table, char* cname) {
     char* cpath;
+   
     if ((cpath = LookupChunk(table, cname)) == NULL) {
-        cout << cname << " was not found in hash table." << endl;
-        return;
+	    cout << cname << " was not found in hash table." << endl;
+	    return -1;
     }
     else {
 	    std::cout << cname << " was found in hash table! " <<endl;
+	    return 0;
     }
 }
 

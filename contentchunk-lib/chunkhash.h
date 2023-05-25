@@ -41,7 +41,7 @@ using namespace std;
 		void releaseItem(chunkhash_item* item);
 		void releaseTable(chunkhash_table* table);
 
-		void print_lookup(chunkhash_table* table, char* cname);
+		int print_lookup(chunkhash_table* table, char* cname);
 		void printTable(chunkhash_table* table);
 		
 #endif /* CHUNKHASH_H */

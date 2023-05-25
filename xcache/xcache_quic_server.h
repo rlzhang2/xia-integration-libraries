@@ -10,29 +10,26 @@ extern "C" {
 #include <vector>
 #include <memory>
 #include <string>
-#include <fcntl.h>
 
 #include "xcache_quic.h"
-#include "/root/picoquic/xia-api-lib/quicxiasock.hpp"
-#include "/root/picoquic/xia-api-lib/xiaapi.hpp"
+#include "../xia-api-lib/quicxiasock.hpp"
+#include "../xia-api-lib/xiaapi.hpp"
 #include "../contentchunk-lib/chunkapi.h"               //chunk content
-#include "../contentchunk-lib/chunkhash.h"
+#include "../contentchunk-lib/chunkhash.h"              //chunk hashtable
+
 #define TEST_CHUNK_SIZE 300
 
 using XcacheQUICPtr = std::unique_ptr<XcacheQUIC>;
 using QUICXIASocketPtr = std::unique_ptr<QUICXIASocket>;
 
-struct callback_context_t {
-        int connected;
-        int stream_open;
-        int received_so_far;
-        uint64_t last_interaction_time;
-        std::vector<uint8_t> data;
-        size_t datalen;
-        size_t sent_offset;
-	NodePtr xid;
-	std::vector<std::string> vxid;
-};
+typedef struct {
+    int stream_open;
+    int received_so_far;
+    std::vector<uint8_t> data;
+    size_t datalen;
+    size_t sent_offset;
+    NodePtr xid;
+} callback_context_t;
 
 class XcacheQUICServer {
     public:
@@ -43,6 +40,9 @@ class XcacheQUICServer {
         int sendInterest(sockaddr_x& icid_dag);
         int fd();
         GraphPtr serveCID(const std::string& cid);
+	chunkhash_table*  gethashtable();
+	void upthashtable(vector <string> xidLst);
+	std::string getCID();
     private:
         static int server_callback(picoquic_cnx_t* connection,
                 uint64_t stream_id, uint8_t* bytes, size_t length,
@@ -69,6 +69,7 @@ class XcacheQUICServer {
         sockaddr_x addr_from;
         sockaddr_x addr_local;
         int64_t delta_t;
+	chunkhash_table* xcache_cidHash;
 
         int sockfd;     // QUIC socket, this server is listening to
         QUICXIASocketPtr xcache_socket;
