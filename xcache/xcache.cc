@@ -24,6 +24,7 @@
 #define TEST_CID "TEST_CID"
 #define CONTENT_STORE "CONTENT_STORE"
 #define ROUTER_PORT "ROUTER_PORT"
+#define WORKDIR "WORKDIR"
 
 using namespace std;
 
@@ -44,7 +45,7 @@ char* tmp_c = const_cast<char*>(test_cid.c_str());
 std::string proc_type;
 std::string homepath = getenv("HOME");
 #ifdef WORKDIR
-	homepath.assign(WORKDIR);
+	homepath.assign(conf.get(WORKDIR));
 #endif
 //PUT contents on xcache
 std::string xContent_f = homepath  + conf.get(CONTENT_STORE);

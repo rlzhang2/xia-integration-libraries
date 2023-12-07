@@ -31,6 +31,7 @@ extern "C" {
 #define IFNAME "IFNAME"
 #define CONTROL_PORT "8295"
 #define CONTROL_IP "172.64.0.31"
+#define WORKDIR "WORKDIR"
 
 int cnx_handler (struct addr_info_t &test_from_addr, 
 		 struct addr_info_t &test_to_addr, LocalConfig &conf) {
@@ -47,7 +48,7 @@ int cnx_handler (struct addr_info_t &test_from_addr,
 	auto confile = LocalConfig(CONFFILE);
 	std::string homepath = getenv("HOME");
 	#ifdef WORKDIR
-                        homepath.assign(WORKDIR);
+                        homepath.assign(confile.get(WORKDIR));
         #endif
         std::string tmpContent_f = homepath  + confile.get(CONTENT_STORE);
 	vector <string> xid_lst;

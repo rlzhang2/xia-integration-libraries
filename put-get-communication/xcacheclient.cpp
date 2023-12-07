@@ -35,6 +35,7 @@ extern "C" {
 #define TICKET_STORE "TICKET_STORE"
 #define TEST_CID "TEST_CID"
 #define CHUNKS_RECV_DIR "CHUNKS_RECV_DIR"
+#define WORKDIR "WORKDIR"
 
 using namespace std;
 
@@ -116,7 +117,7 @@ int process_data(struct xcache_callback_context_t* context, uint8_t* bytes, size
 	std::string tmp_fs;
         std::string homepath = getenv("HOME");
         #ifdef WORKDIR
-        	homepath.assign(WORKDIR);
+        	homepath.assign(conf.get(WORKDIR));
         #endif
         tmp_fs = homepath + conf.get(CHUNKS_RECV_DIR);
 

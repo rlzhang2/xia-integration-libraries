@@ -23,6 +23,7 @@ extern "C" {
 #define IFNAME "IFNAME"
 #define CONTROL_PORT "8295"
 #define CONTROL_IP "172.64.0.21"
+#define WORKDIR "WORKDIR"
 
 void print_address(struct sockaddr* address, char* label)
 {

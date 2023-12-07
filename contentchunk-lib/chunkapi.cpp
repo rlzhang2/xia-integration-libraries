@@ -34,6 +34,7 @@ const uint32_t default_ttl = 0;
 #define CONTENT_STORE "CONTENT_STORE"
 #define KEY_DIR  "KEY_DIR"
 #define XID_TYPE  "CID"
+#define WORKDIR "WORKDIR"
 
 /**
  * STEP3. Helper Function
@@ -113,7 +114,7 @@ std::string get_keypath(std::string publisherName, int is_privkey)
         std::string keydir = conf.get(KEY_DIR);
         std::string homepath = getenv("HOME");
         #ifdef WORKDIR
-                homepath.assign(WORKDIR);
+                homepath.assign(conf.get(WORKDIR));
         #endif
         std::string publisher_keydir = homepath +  keydir + publisherName;
 
@@ -203,7 +204,8 @@ std::pair<string, uint8_t*> get_chunkhash(std::string cid, std::vector<uint8_t>&
         struct stat info;
 	std::string homepath = getenv("HOME");
 	#ifdef WORKDIR
-		homepath.assign(WORKDIR);
+		 auto confile = LocalConfig(CONFFILE);
+		 homepath.assign(confile.get(WORKDIR));
         #endif
 
         std::string content_dir = homepath + CHUNKS_DIR;
@@ -241,7 +243,8 @@ std::vector<uint8_t> get_chunkdata(std::string cid,string processType, size_t cS
     //Check to see if CID content is available on xcache local:
      std::string homepath = getenv("HOME");
      #ifdef WORKDIR
-	homepath.assign(WORKDIR);
+     	 auto confile = LocalConfig(CONFFILE);
+     	 homepath.assign(confile.get(WORKDIR));
      #endif
      std::string CID_path = homepath + CHUNKS_DIR + cid;
 
@@ -307,7 +310,8 @@ std::tuple<string, std::vector<uint8_t>, size_t> load_chunk(std::string cid, std
         int rc;
         std::string homepath = getenv("HOME");
         #ifdef WORKDIR
-                homepath.assign(WORKDIR);
+		auto confile = LocalConfig(CONFFILE);
+		 homepath.assign(confile.get(WORKDIR));
         #endif
         std::string content_dir = homepath + CHUNKS_DIR;
         std::string path = content_dir + cid;
@@ -365,7 +369,7 @@ bool valid_chunk_signature (std::string ncid_sign, std::string &signature, size_
 	struct stat info;
 	std::string homepath = getenv("HOME");
 	#ifdef WORKDIR
-            homepath.assign(WORKDIR);
+		 homepath.assign(conf.get(WORKDIR));
         #endif
 	std::string content_dir = homepath + CHUNKS_DIR;	
 	size_t post_ncid = ncid_sign.find("NCID:");
@@ -451,7 +455,8 @@ bool valid_chunk_data (std::string sCid, std::vector<uint8_t>& chunk_data) {
 	std::string datahex_located;
 	std::string homepath = getenv("HOME");
 	#ifdef WORKDIR
-        	homepath.assign(WORKDIR);
+		auto confile = LocalConfig(CONFFILE);
+		 homepath.assign(confile.get(WORKDIR));
      	#endif
         std::string content_dir = homepath + CHUNKS_DIR;
         std::string path = content_dir + sCid;
@@ -518,7 +523,8 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count)
 	char digest_string[SHA_DIGEST_LENGTH*2+1];
 	std::string homepath = getenv("HOME");
      	#ifdef WORKDIR
-        	homepath.assign(WORKDIR);
+		auto confile = LocalConfig(CONFFILE);
+		 homepath.assign(confile.get(WORKDIR));
      	#endif
 	std::string content_dir = homepath + CHUNKS_DIR;
 	std::string xid_type = XID_TYPE;
@@ -560,7 +566,8 @@ int write_signature(std::string sign, std::string sign_buf)
 {
         std::string homepath = getenv("HOME");
         #ifdef WORKDIR
-                homepath.assign(WORKDIR);
+		 auto confile = LocalConfig(CONFFILE);
+		 homepath.assign(confile.get(WORKDIR));
         #endif 
         std::string sign_dir = homepath + SIGNATURE_BIN;
         std::string sign_name = sign_dir + sign;
@@ -610,7 +617,8 @@ std::string write_chunk(const unsigned char *buf, uint32_t byte_count, std::stri
 {
 	std::string homepath = getenv("HOME");
      	#ifdef WORKDIR
-        	homepath.assign(WORKDIR);
+		 auto confile = LocalConfig(CONFFILE);
+		 homepath.assign(confile.get(WORKDIR));
      	#endif
 	std::string content_dir = homepath + CHUNKS_DIR;
 	std::string sType("NCID:");
@@ -816,7 +824,8 @@ chunkhash_table* initHashtable (chunkhash_table* Hashtmp, const vector<string>& 
 		std::string tmpName = cid_list_t[i];
 		std::string homepath = getenv("HOME");
      		#ifdef WORKDIR
-        		homepath.assign(WORKDIR);
+			 auto confile = LocalConfig(CONFFILE);
+			 homepath.assign(confile.get(WORKDIR));
      		#endif
 		std::string tmpPath = homepath + CHUNKS_DIR + tmpName;
 
@@ -868,7 +877,8 @@ std::map <std::string, chunkMeta> get_mapOfchunks (std::string path )
   struct stat st;
   std::string homepath = getenv("HOME");
   #ifdef WORKDIR
-        homepath.assign(WORKDIR);
+  	 auto confile = LocalConfig(CONFFILE);
+  	 homepath.assign(confile.get(WORKDIR));
   #endif
   std::string content_dir = homepath + CHUNKS_DIR;
   struct dirent* de;

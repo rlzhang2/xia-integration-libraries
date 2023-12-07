@@ -22,8 +22,8 @@
 
 #include "headers/ncid_header.h"
 //#define WORKDIR "/home/testpath"  //default is user's home directory
+#define WORKDIR "WORKDIR"
 #define CHUNKS_RECV_DIR "CHUNKS_RECV_DIR"
-//#define CHUNKS_RECV_DIR "/picoquic/tmpChunks_recv/"
 
 using namespace std;
 
@@ -111,10 +111,10 @@ int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
         std::cout<<"--------function: "<<__FUNCTION__<<"------"<<endl;
                 std::string path;
                 std::string homepath = getenv("HOME");
-                #ifdef WORKDIR
-                        homepath.assign(WORKDIR);
-                #endif
 		auto conf = LocalConfig(CONFFILE);
+                #ifdef WORKDIR
+                        homepath.assign(conf.get(WORKDIR));
+                #endif
         	std::string recv_dir = conf.get(CHUNKS_RECV_DIR);
                 std::string tmp_fs = homepath + recv_dir;
                 size_t found;
