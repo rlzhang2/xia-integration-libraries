@@ -1,0 +1,51 @@
+-- This is for memo for adding the application api to utilize upper level communication between application and xia libraries
+
+1. New and modified functions and source files for application api:
+
+  * picoquic/contentchunk-lib/chunkapi.h/cpp    --modifed
+  -  chunk_file_hash(): new function to call from application to partition a content file from the specified location 
+			into chunks in a customized directory with a specific chunksize 
+
+  - chunk_file(): add new parameters chunk_location and cid_type from application to indicate the content type and 
+		  the directory to store the chunks made from content file. The function returns a list of chunkID.  
+
+  - get_chunkdata(): add new parameter chunk_location to indcate the location retrieving the specific chunk
+
+ * picoquic/contentchunk-lib/get_putChunkapi.cpp    --modifed
+  - add chunk storage and receiving location parameters in the call of put_chunk and store_chunk functions.
+
+ * picoquic/xcache/xcache_quic_server.h/.cc;
+   picoquic/xcache/xcache_picoquicclientget.cpp --modified
+  - add the chunk storage and receiving location parameter to be consistent with the updated function of get_chunkdata()
+
+ * picoquic/put-get-communication/picoquicserverxiaget.cpp; 
+   picoquic/put-get-communication/picoquicclientxiaget.cpp --modified
+ - add the chunk location parameter to be consistent with the updated function of get_chunkdata()
+   
+ * picoquic/put-get-communication/picoquicclientxiapush.h --newfile
+   //This is a new header file. The functions defined in the file serve as application api to call from client program and execute functions to operate lower level xia modules and libraies functions
+
+   - init_client(): Initializes client application with the confile file; it returns fromaddr and serveraddr dag client intend for packet transmission if the initialization runs sucessful
+
+   - putfile(): Takes in parameters from application to partition file into chunks, and iterates the list of chunks to transmit chunk data through the picoquic connection to server destination
+
+   - putchunk(): Serves for the content provider to retrieve a specific chunk data from chunk storage location, and transmit it through picoquic connection to client destination (content receiver) 
+
+   - getchunk(): Serves for the content requestor to get chunk based on xid from a destination server and store the chunk into the desired receiving location
+
+   - cnx_handler(): Creates the quic client and connection for process data transmission between endpoint client and server
+
+ * picoquic/put-get-communication/picoquicclientxiapush.cpp  --modifed
+  - modifed cnx_handler() and also add other implentation for picoquicclientxiapush.h 
+
+ * picoquic/put-get-communication/picoquicclientxiaapp.cpp  --new file
+  //the file serves as the application program to be able to readin the application configFile to initialize the application and call other application api functions.
+
+2. Makefile change:
+ picoquic/CMakeLists.txt --modifed
+ - add set(PICOQUIC_APPLIB_FILES
+    put-get-communication/picoquicclientxiaapp.cpp
+    put-get-communication/picoquicclientxiapush.cpp
+) and executable clientapp                     																	         
+3. All these changes are checked in the git repository for reference under a seperate folder: picoquic/application-api-test 
+ 
