@@ -171,8 +171,12 @@ int main()
 	auto conf = LocalConfig(CONFFILE);
         conf.control_addr = CONTROL_IP;
         conf.control_port = CONTROL_PORT;
-        auto test_cid = conf.get(TEST_CID);
 	auto xcache_aid = conf.get(XCACHE_AID);
+
+	//construct a vector of xid
+        vector <string> xid_lst;
+	std::string test_cid = conf.get(TEST_CID);
+        xid_lst.emplace_back(test_cid);
 
 	addr_info_t myaddr;
 	addr_info_t serveraddr;
@@ -273,7 +277,8 @@ int main()
 
 	// If 0RTT is available, start a stream
 	if(picoquic_is_0rtt_available(connection)) {
-		start_stream(connection, &callback_context);
+		//start_stream(connection, &callback_context);
+		put_chunk(connection, &callback_context,procType,xid_lst);
 		zero_rtt_available = 1;
 	}
 	printf("Zero RTT available: %d\n", zero_rtt_available);
@@ -362,7 +367,8 @@ int main()
 								picoquic_get_logging_cnxid(connection)));
 					if(!zero_rtt_available) {
 						printf("zero rtt was not available, starting stream\n");
-						start_stream(connection, &callback_context);
+						//start_stream(connection, &callback_context);
+						put_chunk(connection, &callback_context,procType,xid_lst);
 					}
 					established = 1;
 				}

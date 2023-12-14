@@ -46,7 +46,6 @@ LocalConfig& LocalConfig::get_instance(const std::string& confFile)
 
 LocalConfig::LocalConfig(const std::string& confFile)
 {
-	 std::cout<<"HERE in LocalConfig!!"<<std::endl;
 	std::ifstream configuration(confFile);
 	if(!configuration.is_open()) {
 		throw "ERROR reading local config";

@@ -130,7 +130,6 @@ int XcacheQUICServer::incomingPacket() {
                 send_buffer, sizeof(send_buffer), &send_length,
                 (struct sockaddr_storage*) &addr_from, &peer_addr_len,
                 (struct sockaddr_storage*) &addr_local, &local_addr_len);
-	cout<<"RZ Check send_length: "<<sizeof(send_buffer)<<endl;
         if(rc == PICOQUIC_ERROR_DISCONNECTED) {
             // Connections list is empty, if this was the last connection
             if(next_connection == newest_cnx) {

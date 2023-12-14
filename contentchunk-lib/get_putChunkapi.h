@@ -43,7 +43,7 @@ void get_chunk_data (struct addr_info_t &test_from_addr, struct addr_info_t &tes
                         picoquic_quic_t *quic_client, struct callback_context_t callback_context, int state, 
 			uint64_t current_time,std::string process_type, LocalConfig &conf);
 void put_chunk(picoquic_cnx_t* connection,
-                struct callback_context_t* context, int numOfxids, std::string process_type, vector <string> xid_lst);
+                struct callback_context_t* context, std::string process_type, vector <string> xid_lst);
 int store_chunk(picoquic_cnx_t* cnx, struct callback_context_t* context,
         uint8_t* bytes, size_t length, std::string xid_requested, std::string process_type);
 void ack_response(picoquic_cnx_t* connection, uint64_t stream_id, int resp_code, struct callback_context_t* context);

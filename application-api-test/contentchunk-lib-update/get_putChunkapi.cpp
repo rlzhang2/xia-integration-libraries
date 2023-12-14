@@ -252,7 +252,7 @@ static int client_putdata_transfer(picoquic_cnx_t* cnx,
                         printf("Callback: close\n");
                 case picoquic_callback_application_close:
                         printf("Callback: application close\n");
-			picoquic_set_callback(cnx, NULL, NULL);//RZ TEST0921
+			picoquic_set_callback(cnx, NULL, NULL);
                 case picoquic_callback_stateless_reset:
                         printf("Callback: stateless reset\n");
                         context->stream_open = 0;
@@ -345,7 +345,6 @@ static int client_data_transfer(picoquic_cnx_t* cnx,
                 case picoquic_callback_stateless_reset:
                         printf("Callback: stateless reset\n");
                         context->stream_open = 0;
-			//RZ close connection 
 			picoquic_close(cnx, 0);
                         return 0;
                 case picoquic_callback_stream_reset:

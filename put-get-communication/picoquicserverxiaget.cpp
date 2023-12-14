@@ -91,7 +91,7 @@ static int server_callback(picoquic_cnx_t* connection,
 			break;
 		// Handle the connection related events
 		case picoquic_callback_close:
-			printf("RZ ServerCallback: Close\n");
+			printf("ServerCallback: Close\n");
 		case picoquic_callback_application_close:
 			printf("ServerCallback: ApplicationClose\n");
 		case picoquic_callback_stateless_reset:
@@ -263,7 +263,6 @@ int main()
 	PICOQUIC_SET_LOG(server, logfile);
 
 	// Wait for packets  -- Server need call recvfrom function first in order to send reply to Client
-	printf("RZ Check server socket fd %d for waiting for packets from Client!\n", myaddr.sockfd); 
 	while(1) {
 		int64_t delta_t = picoquic_get_next_wake_delay(server, current_time,
 				delay_max);
@@ -284,7 +283,6 @@ int main()
 			printf("Server: got %d bytes from client\n", bytes_recv);
 			char label[] = "Server: client addr:";
                         print_address((struct sockaddr*)&addr_from, label);
-		   //RZ: Submit packet to the Server
 			(void)picoquic_incoming_packet(server, buffer,
 					(size_t)bytes_recv, (struct sockaddr*)&addr_from,
 					(struct sockaddr*)&addr_local, to_interface,
@@ -300,8 +298,6 @@ int main()
 					|| connections!=picoquic_get_first_cnx(server)) {
 				printf("Server: New connection\n");
 				connections = picoquic_get_first_cnx(server);
-				printf("RZ Connection Check: %" PRIx64 ": ", 
-						picoquic_val64_connection_id(picoquic_get_initial_cnxid(connections)));
 
 				if(connections == NULL) {
 					printf("ERROR: No connection found!\n");
@@ -355,7 +351,6 @@ int main()
 					(struct sockaddr_storage*) &local_addr, &local_addr_len);
 			if(rc == PICOQUIC_ERROR_DISCONNECTED) {
 				// Connections list is empty, if this was the last connection
-			printf("RZ Check Next Connection: %" PRIx64 ": ", picoquic_val64_connection_id(picoquic_get_logging_cnxid(next_connection)));
 				if(next_connection == connections) {
 					connections = NULL;
 				}
