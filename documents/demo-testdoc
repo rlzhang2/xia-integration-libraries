@@ -1,0 +1,218 @@
+DemoMemo for November 15, 2023
+---------------
+Test scenarios:
+
+-Controller is set under Container R1
+-ControllerProgram : 
+   @param: -e  //apply the specific events.conf to router
+   @param: -d  // use -c if xcache is enabled, otherwise ' -d' to apply default demo.conf; 
+################################################
+CaseA. Client requests PUTfile to endServer             
+################################################
+	- Setup: 1)testsample on Client(../picoquic/tmpContents) servers as Client's samplefile to PUT onto Server
+	         2)events.conf: xia-core/tools/overlay/demo-conf/eventfile
+	          
+	- Execution:
+		Routers:  ./RouterConfigProgram 
+		Controller: ./ControllerProgram -e eventfile -d
+	  	Client:  ./ClientPUTprogram
+	  					- to empty Client Chunk storage folder under picoquic/
+	  					- kick off Client's PUSH program
+	  	Server:  ./ServerPUTprogram
+	  					- to empty Server storage folder under picoquic/
+	  					- kick off Server's PUSH program				
+	  	
+	- Log results: 
+	    //Compared Client's chunks sent out(tmpChunks/) to Server's received chunks(tmpChunks_recv)
+		Client:  PUT send chunks request
+		Server: receive and store in chunk storage
+		
+		
+################################################		
+case B. Client requests GETfile from Server         
+################################################
+     - Setup: 
+     	1)events.conf: xia-core/tools/overlay/demo-conf/eventfile
+     	2))testchunks available on Server
+
+	- Execution:
+	    Routers:  ./RouterConfigProgram 
+		Controller: ./ControllerProgram -e eventfile -d
+        Client: ./ClientGETprogram    // empty chunk receiving folder tmpChunks_recv/ 
+     	Server: ./SeverGETprogram     // set chunks available under tmpChunks/
+  
+     - Log result:
+		 Client: Chunks received and stored under tmpChunks_recv/  
+         Server: Output message if no matched chunk is found
+         
+################################################        
+case C: R1-R2 link unavilable, Client requests PUTfile to Server              
+################################################
+     - Setup: 
+     	1)events.conf: dir-dis-put 
+
+	- Execution:
+	    Routers:  ./RouterConfigProgram 
+		Controller: ./ControllerProgram -e dir-dis-put -d
+        Client: ./ClientPUTprogram     
+     	Server: ./SeverPUTprogram     
+  
+    - Log result: 
+		Controller: sent link-removed request to the router
+		Router1, 2 deleted routes to neighbor router 
+		Server failed to receive chunks from Client
+         
+################################################	
+case D: R1-R2 link unavilable, Client requests GETfile from Server          
+################################################
+    - Setup: 
+     	1)events.conf: dir-dis-get 
+
+	- Execution:
+	    Routers:  ./RouterConfigProgram 
+		Controller: ./ControllerProgram -e dir-dis-get -d
+        Client: ./ClientGETprogram     
+     	Server: ./SeverGETprogram     
+  
+    - Log result: 
+		Controller: sent link-removed request to the router
+		Router1, 2 deleted routes to neighbor router 
+		Client failed to receive chunks from endServer
+		
+################################################		
+case E: R1-R2 re-add link, Client requests PUT file to Server          
+################################################
+  - Setup: 
+	   1)events.conf: dir-relink  //Add another event to re-add connection R1-R2
+  
+  - Execution:
+	    Routers:  ./RouterConfigProgram 
+		Controller: ./ControllerProgram -e dir-relink -d
+        Client: ./ClientPUTprogram     
+     	Server: ./SeverPUTprogram     
+  	
+ - log result:
+    Routers: Neighbor's route is removed and then added back on Router 
+    Server: received chunks from Client successfully
+    
+################################################	
+Case F.	R1-R2 re-add link, Client request GET file from Server
+################################################
+    - Setup: 
+    	1)events.conf: dir-relink  //Add another event to re-add connection R1-R2
+        
+	- Execution:
+	    Routers:  ./RouterConfigProgram 
+		Controller: ./ControllerProgram -e dir-relink -d
+        Client: ./ClientGETprogram     
+     	Server: ./SeverGETprogram     
+  	
+ - log result:
+    Routers: Neighbor's route is removed and then added back on Router 
+    Client: received chunks under tmpChunks_recv/ from Server
+    
+################################################	 
+case G.  Xcache enabled, Client requests PUTfile to Server  
+################################################
+     - Setup:
+  		a)ControllerProgram take '-c' parameter //xcache is enabled on R1
+ 	 
+	- Execution:
+	    Routers:  ./RouterConfigcpProgram  //clean chunk receiving folder under xCache
+		Controller: ./ControllerProgram -e eventfile -c
+        Client: ./ClientPUTprogram     
+     	Server: ./SeverPUTprogram 
+  
+ 	- Log result: 
+ 		Chunk CIDs routes were added into Router1 forwarding table
+		Xcache (sit on the same container as R1)receive chunks and loaded in xCache storage ./picoquic/tmpChunks/
+		Server receives chunks and loaded EndServer's chunk storage tmpChunks_recv
+	
+################################################
+case H. Xcache enabled, Client requests to GET chunk 
+################################################
+    - Setup:
+  		a)ControllerProgram take '-c' parameter //xcache is enabled on R1
+  		b)Define required XID in Client conf/local.conf
+  		
+  	- Execution:
+	    Routers:  ./RouterConfigcgProgram  //Have hunks available in xcache chunk directory ./tmpChunks, empty directory ./tmpChunk_recv
+	    Controller: ./ControllerProgram -e eventfile -c
+        Client: ./ClientGETcprogram   //kickoff xcache_picoquicclientget  
+     	Server: ./SeverGETprogram 
+ 	
+ 	- Log result: 	
+		e) if a match chunk is found, xcache send chunk to Client,  Client received under its ./tmpChunks_recv
+           if there's no match found in xcache.  container R1 output msag: no chunk available in the xcache
+   
+################################################
+case I.  R1-R2 link unavailable , indiret-PUT    
+################################################
+ 	- Setup:
+  		a)ControllerProgram take '-c' parameter //xcache is enabled on R1
+  		b)ControllerProgram take '-e ind-dis-put' //events.conf used
+  		
+	- Execution:
+	    Routers: ./RouterConfigcpProgram  
+	    Controller: ./ControllerProgram -e ind-dis-put -c
+        Client: ./ClientPUTprogram   
+     	Server: ./SeverPUTprogram 
+   
+	-Log result:
+	 xCache receives the chunks at tmpChunks/
+	 EndServer failed to receive chunk
+	 
+################################################
+case J. R1-R2 link unavailable , indirect-GET   
+################################################
+	- Setup:
+  		a)ControllerProgram take '-c' parameter //xcache is enabled on R1
+  		b)ControllerProgram take '-e ind-dis-get' //events.conf used
+  		
+	- Execution:
+	    Routers: ./RouterConfigcgProgram  // have test chunks available in xCache, and empty tmpChunks_recv
+	    Controller: ./ControllerProgram -e ind-dis-get -c
+        Client: ./ClientGETcprogram   
+     	Server: ./SeverGETprogram 
+   
+    -Log result:
+	 Client should receive the chunk at tmpChunks_recv/ from xcache
+	  
+################################################	 	 
+case K. R1-R2 readd_link indirect-PUT     
+################################################
+         
+ - Setup:
+  		a)ControllerProgram take '-c' parameter //xcache is enabled on R1
+  		b)ControllerProgram take '-e ind-relink' //events.conf used
+  		
+	- Execution:
+	    Routers: ./RouterConfigcpProgram  
+	    Controller: ./ControllerProgram -e ind-dis-put -c
+        Client: ./ClientPUTprogram   
+     	Server: ./SeverPUTprogram 
+     		
+	 -Log result:
+	  Chunks and Server received Chunks
+
+
+
+################################################    
+case L. R1-R2 readd_link, indirect GET     
+################################################  
+	- Setup:
+  		a)ControllerProgram take '-c' parameter //xcache is enabled on R1
+  		b)ControllerProgram take '-e ind-relink' //events.conf used
+  		
+	- Execution:
+	    Routers: ./RouterConfigcgProgram  //have sample chunks under tmpChunks;empty tmpChunks_recv
+	    Controller: ./ControllerProgram -e ind-relink -c
+        Client: ./ClientGETcprogram   
+     	Server: ./SeverGETprogram 
+ 
+    -Log result:
+	    Client: received chunks from xcache and store under Client:tmpChunks_recv
+	 
+
+
+

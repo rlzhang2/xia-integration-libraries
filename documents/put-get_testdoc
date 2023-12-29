@@ -1,0 +1,31 @@
+#steps testing on client PUT request#
+Using testing Dockerfile under https://github.com/rlzhang2/overlay-ctl-config.git to setup the docker containers C1 (serves as Client endpoint), S1 (serves as Server endpoint), R1(serves as router1 and controller), R2(serves as router2)
+1. Go to container R1 xia-core directory, clear temporary generated config file by exeute : rm etc/nodes.conf etc/address.conf etc/resolv.conf
+2. Under R1 xia-core directory, execute: python ./tools/overlay/xiaconfighelper.py
+3. Do the same steps1 and 2 with container R2. 
+4. Go to C1 picoquic directory, execute ./build/picoquicclientxiapush
+5. Go to S1 picoquic directory, execute ./build/picoquicserverxiapush
+6. Go to container controller R1 xia-core directory, execute: python ./tools/overlay/xiaconfigurator.py
+
+
+#Test expected results#
+1. On container R1, R2, the temporary folder ca/ , publishers, and keys/ are generated. they could be clear everytime after testing
+2.On container S1 picoquic directory, a new directory tmpChunks_recv/ is generated. All the chunks generated from C1 requested contents are pushed onto Server S1 under this directory.  Compare the chunks size from C1 chunk directory: picoquic/tmpChunks/ to ensure they are matched.
+-----------------------------------------
+
+#steps testing on client GET request#
+Using testing Dockerfile under https://github.com/rlzhang2/overlay-ctl-config.git to setup the docker containers C1 (serves as Client endpoint), S1 (serves as Server endpoint), R1(serves as router1 and controller), R2(serves as router2)
+1. Go to container R1 xia-core directory, clear temporary generated config file by exeute : rm etc/nodes.conf etc/address.conf etc/resolv.conf
+2. Under R1 xia-core directory, execute: python ./tools/overlay/xiaconfighelper.py
+3. Do the same steps1 and 2 with container R2.
+4. Go to C1 picoquic directory, execute ./build/picoquicclientxiaget
+5. Go to S1 picoquic directory, execute ./build/picoquicserverxiaget
+6. Go to container controller R1 xia-core directory, execute: python ./tools/overlay/xiaconfigurator.py
+
+
+#Test expected results#
+2.On container C1 picoquic directory, a new directory tmpChunks_recv/ is generated. Chunkss are retrieved from  Server S1 chunk storage directory picoquic/tmpChunks. If chunks exists in Server, then they will be sent over to Client receive folder.
+
+
+
+~                               
